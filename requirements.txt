@@ -1,0 +1,9 @@
+# Basic requirements for geospatial AI poverty estimation
+numpy
+pandas
+matplotlib
+scikit-learn
+rasterio
+geopandas
+opencv-python
+jupyter

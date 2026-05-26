@@ -1,0 +1,19 @@
+name: geo-dl
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pytorch
+  - torchvision
+  - torchaudio
+  - cpuonly  # Remove or change for GPU support
+  - rasterio
+  - geopandas
+  - shapely
+  - rioxarray
+  - xarray
+  - matplotlib
+  - jupyterlab
+  - folium

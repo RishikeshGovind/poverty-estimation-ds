@@ -1,0 +1,34 @@
+data:
+  survey_path: data/dhs_survey.csv
+  image_path: data/raw/kenya_sentinel2.tif
+  patches_dir: data/patches
+  training_csv: data/training_dataset.csv
+  predictions_csv: data/predictions.csv
+
+sentinel2:
+  bbox: [36.7, -1.35, 36.9, -1.15]
+  date_range: "2023-01-01/2023-12-31"
+  max_cloud_cover: 10
+  normalization_factor: 10000
+
+training:
+  batch_size: 16
+  epochs: 20
+  lr: 1.0e-4
+  split: 0.8
+  patch_size: 256
+  model_dir: outputs/models
+  checkpoint: outputs/models/best_model.pth
+  loss_plot: outputs/metrics/loss_plot.png
+
+evaluation:
+  checkpoint: outputs/models/best_model.pth
+  scatter_plot: outputs/metrics/scatter_plot.png
+
+api:
+  host: "127.0.0.1"
+  port: 8000
+
+logging:
+  level: INFO
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"

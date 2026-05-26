@@ -1,0 +1,77 @@
+<!-- visualization/cesium_globe.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Poverty Predictions Globe</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <style>
+    html, body, #cesiumContainer {
+      width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+    }
+    #infoBox {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(255,255,255,0.9);
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div id="infoBox"></div>
+  <script>
+    // 1. Initialize Cesium globe
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      timeline: false,
+      animation: false
+    });
+
+    // 2. Example GeoJSON prediction data (replace with your own or load via AJAX)
+    const predictionData = {
+      "type": "FeatureCollection",
+      "features": [
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [77.55, 12.85]}, "properties": {"prediction": 0.23}},
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [77.58, 12.88]}, "properties": {"prediction": 0.45}},
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [77.52, 12.82]}, "properties": {"prediction": 0.67}}
+      ]
+    };
+
+    // 3. Add markers for each prediction
+    predictionData.features.forEach(function(feature) {
+      const coords = feature.geometry.coordinates;
+      const pred = feature.properties.prediction;
+      const entity = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(coords[0], coords[1]),
+        point: {
+          pixelSize: 12,
+          color: Cesium.Color.BLUE.withAlpha(0.7),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2
+        },
+        properties: {
+          prediction: pred
+        }
+      });
+    });
+
+    // 4. Show prediction value on marker click
+    const infoBox = document.getElementById('infoBox');
+    viewer.screenSpaceEventHandler.setInputAction(function onLeftClick(movement) {
+      const pickedObject = viewer.scene.pick(movement.position);
+      if (Cesium.defined(pickedObject) && pickedObject.id && pickedObject.id.properties) {
+        const pred = pickedObject.id.properties.prediction;
+        infoBox.style.display = 'block';
+        infoBox.innerHTML = `<b>Poverty Prediction:</b> ${pred}`;
+      } else {
+        infoBox.style.display = 'none';
+      }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  </script>
+</body>
+</html>
