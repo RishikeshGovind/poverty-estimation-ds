@@ -62,7 +62,8 @@ def run_training(sensors, run_name, epochs=None, csv_path=None, checkpoint_dir=N
     val_loader   = DataLoader(val_ds,   batch_size=batch_size, shuffle=False, num_workers=0)
 
     n_channels = sensor_channels(sensors)
-    model = ResNetRegression(in_channels=n_channels).to(device)
+    dropout_p = cfg.get("model", {}).get("dropout_p", 0.0)
+    model = ResNetRegression(in_channels=n_channels, dropout_p=dropout_p).to(device)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=3)
     criterion = nn.MSELoss()

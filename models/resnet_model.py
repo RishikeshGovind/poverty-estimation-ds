@@ -7,11 +7,10 @@ import torch.nn as nn
 import torchvision.models as models
 
 class ResNetRegression(nn.Module):
-    def __init__(self, in_channels=3):
+    def __init__(self, in_channels=3, dropout_p=0.0):
         super().__init__()
-        # 1. Load pretrained ResNet18
         self.model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-        # 2. Modify first conv layer for multispectral input
+
         old_conv = self.model.conv1
         self.model.conv1 = nn.Conv2d(
             in_channels,
@@ -19,7 +18,7 @@ class ResNetRegression(nn.Module):
             kernel_size=old_conv.kernel_size,
             stride=old_conv.stride,
             padding=old_conv.padding,
-            bias=old_conv.bias is not None
+            bias=old_conv.bias is not None,
         )
         if in_channels != 3:
             with torch.no_grad():
@@ -28,19 +27,20 @@ class ResNetRegression(nn.Module):
                         old_conv.weight[:, :in_channels].clone()
                     )
                 else:
-                    # Copy RGB weights into first 3 channels; initialise extra
-                    # channels as the mean of the RGB weights (better than
-                    # duplicating a single channel).
                     self.model.conv1.weight[:, :3] = old_conv.weight
                     mean_w = old_conv.weight.mean(dim=1, keepdim=True)
                     for i in range(3, in_channels):
                         self.model.conv1.weight[:, i] = mean_w.squeeze(1)
-        # 3. Replace classification head with regression head
+
         num_features = self.model.fc.in_features
-        self.model.fc = nn.Linear(num_features, 1)
+        self.model.fc = (
+            nn.Sequential(nn.Dropout(p=dropout_p), nn.Linear(num_features, 1))
+            if dropout_p > 0
+            else nn.Linear(num_features, 1)
+        )
 
     def forward(self, x):
-        return self.model(x).squeeze(1)  # Output shape: (batch,)
+        return self.model(x).squeeze(1)  # (batch,)
 
 # Example usage:
 # model = ResNetRegression(in_channels=3)

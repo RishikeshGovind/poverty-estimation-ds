@@ -57,6 +57,28 @@ api:
   host: "127.0.0.1"
   port: 8000
 
+model:
+  dropout_p: 0.3        # MC Dropout probability; 0 = no dropout
+  mc_samples: 50        # Forward passes for uncertainty estimation
+
+# Multi-task SDG proxy heads
+tasks:
+  names: [sdg1_wealth, sdg7_ntl, sdg11_buildup]
+  weights:
+    sdg1_wealth:  1.0   # Primary task — DHS wealth index
+    sdg7_ntl:     0.5   # SDG 7 proxy — VIIRS nighttime radiance (energy access)
+    sdg11_buildup: 0.5  # SDG 11 proxy — S2 mean brightness (built-up area)
+  # Human-readable metadata (used in visualisation / scoring layer)
+  definitions:
+    sdg1_wealth:   {sdg: "SDG 1",  name: "No Poverty",        proxy: "DHS Wealth Index"}
+    sdg7_ntl:      {sdg: "SDG 7",  name: "Clean Energy",       proxy: "VIIRS Nighttime Lights"}
+    sdg11_buildup: {sdg: "SDG 11", name: "Sustainable Cities", proxy: "S2 Mean Brightness"}
+
+spatial_cv:
+  country_col: country
+  min_test_samples: 5   # Skip a country if it has fewer points than this
+  output: outputs/experiments/spatial_cv_results.csv
+
 logging:
   level: INFO
   format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
