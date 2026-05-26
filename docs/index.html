@@ -5,9 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Poverty &amp; SDG Monitor — Sub-Saharan Africa</title>
 
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!--
+    CesiumJS CDN.
+    CESIUM_BASE_URL must be set BEFORE the script loads so workers can find
+    their own chunks. Free to use — no Ion token required for the OSM imagery
+    we use here. Add your free Cesium Ion token below for high-res terrain.
+  -->
+  <script>window.CESIUM_BASE_URL = "https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/";</script>
+  <link href="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Cesium.js"></script>
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,73 +35,116 @@
       --radius:   10px;
     }
 
-    html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
+    html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
 
-    /* ── Layout ── */
     #app { display: flex; flex-direction: column; height: 100vh; }
 
+    /* ── Header ── */
     header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 12px 20px;
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      flex-shrink: 0;
-      flex-wrap: wrap;
+      padding: 10px 20px;
+      display: flex; align-items: center; gap: 20px; flex-shrink: 0; flex-wrap: wrap;
+      z-index: 10;
     }
-
-    header h1 { font-size: 15px; font-weight: 600; white-space: nowrap; }
+    header h1 { font-size: 14px; font-weight: 600; white-space: nowrap; }
     header h1 span { color: var(--accent); }
 
-    #stats-bar {
-      display: flex; gap: 16px; flex-wrap: wrap; margin-left: auto;
-    }
-
-    .stat {
-      display: flex; flex-direction: column; align-items: flex-end;
-      line-height: 1.2;
-    }
+    #stats-bar { display: flex; gap: 16px; flex-wrap: wrap; margin-left: auto; }
+    .stat { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
     .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
     .stat-value { font-size: 14px; font-weight: 600; }
 
-    #main { display: flex; flex: 1; overflow: hidden; }
+    /* ── Main ── */
+    #main { display: flex; flex: 1; overflow: hidden; position: relative; }
 
-    #map { flex: 1; }
+    /* ── Globe container ── */
+    #cesium-container { flex: 1; position: relative; }
+
+    /* Hide default Cesium chrome we don't need */
+    .cesium-viewer-toolbar,
+    .cesium-viewer-animationContainer,
+    .cesium-viewer-timelineContainer,
+    .cesium-viewer-bottom,
+    .cesium-viewer-fullscreenContainer,
+    .cesium-viewer-vrContainer { display: none !important; }
+
+    /* ── Layer toggle bar (floating over globe) ── */
+    #layer-bar {
+      position: absolute; top: 12px; left: 12px; z-index: 20;
+      display: flex; gap: 6px; flex-wrap: wrap;
+    }
+    .layer-btn {
+      padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border);
+      background: var(--surface); color: var(--muted);
+      transition: all .15s;
+    }
+    .layer-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* ── Timeline slider (floating bottom of globe) ── */
+    #timeline-bar {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 20;
+      background: linear-gradient(to top, rgba(15,17,23,.95), transparent);
+      padding: 16px 20px 12px;
+    }
+    #timeline-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    #timeline-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    #year-display { font-size: 18px; font-weight: 700; color: var(--accent); }
+    #play-btn {
+      background: var(--accent); border: none; color: #fff;
+      border-radius: 50%; width: 28px; height: 28px;
+      font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    #timeline-slider {
+      width: 100%; accent-color: var(--accent);
+      -webkit-appearance: none; height: 3px;
+      background: var(--border); border-radius: 99px; outline: none; cursor: pointer;
+    }
+    #timeline-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px;
+      border-radius: 50%; background: var(--accent); cursor: pointer;
+    }
+    #timeline-ticks {
+      display: flex; justify-content: space-between;
+      margin-top: 5px; font-size: 10px; color: var(--muted);
+    }
+
+    /* ── Legend ── */
+    #legend {
+      position: absolute; bottom: 110px; left: 12px; z-index: 20;
+      background: rgba(26,29,39,.9); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 10px 14px; font-size: 11px;
+    }
+    #legend-title { font-weight: 600; margin-bottom: 6px; }
+    .legend-row    { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+    .legend-dot    { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
     /* ── Sidebar ── */
     #sidebar {
       width: 300px;
-      background: var(--surface);
-      border-left: 1px solid var(--border);
-      display: flex; flex-direction: column;
-      overflow-y: auto;
-      flex-shrink: 0;
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
     }
 
     .panel { padding: 16px; border-bottom: 1px solid var(--border); }
     .panel-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
 
-    /* ── Selected cluster ── */
     #cluster-country { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
     #cluster-coords  { font-size: 11px; color: var(--muted); font-family: monospace; margin-bottom: 14px; }
 
-    /* ── SDG score rows ── */
     .sdg-row { margin-bottom: 14px; }
     .sdg-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
     .sdg-name  { font-size: 12px; font-weight: 500; }
     .sdg-badge { font-size: 10px; color: var(--muted); background: var(--bg); padding: 2px 6px; border-radius: 4px; }
     .sdg-score-val { font-size: 13px; font-weight: 700; }
 
-    .progress-track {
-      height: 6px; background: var(--bg); border-radius: 99px; overflow: hidden;
-    }
-    .progress-fill {
-      height: 100%; border-radius: 99px;
-      transition: width .4s ease;
-    }
+    .progress-track { height: 6px; background: var(--bg); border-radius: 99px; overflow: hidden; }
+    .progress-fill  { height: 100%; border-radius: 99px; transition: width .4s ease; }
 
-    /* ── Composite score ring ── */
     #composite-wrap { display: flex; flex-direction: column; align-items: center; padding: 20px 16px; border-bottom: 1px solid var(--border); }
     #composite-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
     #composite-ring  { position: relative; width: 90px; height: 90px; }
@@ -103,34 +152,23 @@
     #composite-ring circle { fill: none; stroke-width: 8; }
     .ring-bg   { stroke: var(--bg); }
     .ring-fill { stroke-linecap: round; transition: stroke-dashoffset .5s ease; }
-    #composite-text {
-      position: absolute; inset: 0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-    }
+    #composite-text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     #composite-num  { font-size: 22px; font-weight: 700; line-height: 1; }
     #composite-unit { font-size: 10px; color: var(--muted); }
 
-    /* ── Uncertainty ── */
     #uncertainty-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
     #uncertainty-label { font-size: 11px; color: var(--muted); }
     #uncertainty-val   { font-size: 12px; font-weight: 500; }
 
-    /* ── Empty state ── */
     #empty-state { padding: 32px 16px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6; }
     #empty-state svg { margin-bottom: 10px; opacity: .4; }
 
-    /* ── Predict panel ── */
     #predict-panel { padding: 16px; }
     #predict-panel .panel-title { margin-bottom: 12px; }
 
     .upload-area {
-      border: 1.5px dashed var(--border);
-      border-radius: var(--radius);
-      padding: 18px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color .2s;
-      margin-bottom: 10px;
+      border: 1.5px dashed var(--border); border-radius: var(--radius);
+      padding: 18px; text-align: center; cursor: pointer; transition: border-color .2s; margin-bottom: 10px;
     }
     .upload-area:hover { border-color: var(--accent); }
     .upload-area p { font-size: 12px; color: var(--muted); margin-top: 6px; }
@@ -147,32 +185,9 @@
     #api-url-input {
       width: 100%; padding: 7px 10px; border-radius: var(--radius);
       background: var(--bg); border: 1px solid var(--border);
-      color: var(--text); font-size: 11px; font-family: monospace;
-      margin-bottom: 8px;
+      color: var(--text); font-size: 11px; font-family: monospace; margin-bottom: 8px;
     }
     #predict-result { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; min-height: 18px; }
-
-    /* ── Legend ── */
-    #legend {
-      position: absolute; bottom: 30px; left: 10px; z-index: 1000;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 10px 14px;
-      font-size: 11px; color: var(--text);
-    }
-    #legend-title { font-weight: 600; margin-bottom: 6px; }
-    .legend-row    { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
-    .legend-dot    { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-
-    /* ── Leaflet popup override ── */
-    .leaflet-popup-content-wrapper {
-      background: var(--surface) !important;
-      color: var(--text) !important;
-      border: 1px solid var(--border) !important;
-      border-radius: var(--radius) !important;
-      box-shadow: 0 4px 20px rgba(0,0,0,.5) !important;
-    }
-    .leaflet-popup-tip { background: var(--surface) !important; }
-    .leaflet-popup-content { font-size: 12px; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -181,48 +196,59 @@
   <header>
     <h1>🌍 Poverty &amp; <span>SDG Monitor</span> — Sub-Saharan Africa</h1>
     <div id="stats-bar">
-      <div class="stat">
-        <span class="stat-label">Clusters</span>
-        <span class="stat-value" id="stat-clusters">—</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Avg SDG 1</span>
-        <span class="stat-value" id="stat-sdg1">—</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Avg SDG 7</span>
-        <span class="stat-value" id="stat-sdg7">—</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Avg SDG 11</span>
-        <span class="stat-value" id="stat-sdg11">—</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Composite</span>
-        <span class="stat-value" id="stat-composite">—</span>
-      </div>
+      <div class="stat"><span class="stat-label">Clusters</span><span class="stat-value" id="stat-clusters">—</span></div>
+      <div class="stat"><span class="stat-label">Avg SDG 1</span><span class="stat-value" id="stat-sdg1">—</span></div>
+      <div class="stat"><span class="stat-label">Avg SDG 7</span><span class="stat-value" id="stat-sdg7">—</span></div>
+      <div class="stat"><span class="stat-label">Avg SDG 11</span><span class="stat-value" id="stat-sdg11">—</span></div>
+      <div class="stat"><span class="stat-label">Composite</span><span class="stat-value" id="stat-composite">—</span></div>
     </div>
   </header>
 
   <div id="main">
-    <!-- Map -->
-    <div id="map">
+    <!-- Globe -->
+    <div id="cesium-container">
+
+      <!-- Layer toggles -->
+      <div id="layer-bar">
+        <button class="layer-btn active" data-layer="composite" onclick="setLayer('composite', this)">Composite</button>
+        <button class="layer-btn" data-layer="sdg1" onclick="setLayer('sdg1', this)">SDG 1 — No Poverty</button>
+        <button class="layer-btn" data-layer="sdg7" onclick="setLayer('sdg7', this)">SDG 7 — Energy</button>
+        <button class="layer-btn" data-layer="sdg11" onclick="setLayer('sdg11', this)">SDG 11 — Cities</button>
+      </div>
+
+      <!-- Legend -->
       <div id="legend">
-        <div id="legend-title">Composite SDG Score</div>
+        <div id="legend-title">Score</div>
         <div class="legend-row"><div class="legend-dot" style="background:#22c55e"></div> High (70–100)</div>
-        <div class="legend-row"><div class="legend-dot" style="background:#eab308"></div> Medium (40–69)</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#eab308"></div> Med (40–69)</div>
         <div class="legend-row"><div class="legend-dot" style="background:#ef4444"></div> Low (0–39)</div>
+      </div>
+
+      <!-- Timeline -->
+      <div id="timeline-bar">
+        <div id="timeline-header">
+          <span id="timeline-label">Observation Year</span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <button id="play-btn" onclick="togglePlay()" title="Auto-advance years">▶</button>
+            <span id="year-display">2023</span>
+          </div>
+        </div>
+        <input type="range" id="timeline-slider" min="2019" max="2024" value="2023" step="1"
+               oninput="onYearChange(this.value)" />
+        <div id="timeline-ticks">
+          <span>2019</span><span>2020</span><span>2021</span><span>2022</span><span>2023</span><span>2024</span>
+        </div>
       </div>
     </div>
 
     <!-- Sidebar -->
     <div id="sidebar">
-      <!-- Composite ring (hidden until selection) -->
+      <!-- Composite ring -->
       <div id="composite-wrap" style="display:none">
         <div id="composite-label">Composite SDG Score</div>
         <div id="composite-ring">
           <svg viewBox="0 0 90 90" width="90" height="90">
-            <circle class="ring-bg" cx="45" cy="45" r="41" />
+            <circle class="ring-bg"  cx="45" cy="45" r="41" />
             <circle class="ring-fill" id="ring-fill" cx="45" cy="45" r="41"
               stroke-dasharray="257.6" stroke-dashoffset="257.6" />
           </svg>
@@ -237,7 +263,7 @@
         </div>
       </div>
 
-      <!-- SDG detail panel (hidden until selection) -->
+      <!-- SDG detail -->
       <div class="panel" id="sdg-detail" style="display:none">
         <div class="panel-title">SDG Breakdown</div>
         <div id="cluster-country"></div>
@@ -277,13 +303,13 @@
         </div>
       </div>
 
-      <!-- Empty state (shown before any selection) -->
+      <!-- Empty state -->
       <div id="empty-state">
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        <p>Click a cluster on the map to see its SDG scores and poverty estimate.</p>
+        <p>Click a cluster on the globe to see its SDG scores and poverty estimate.</p>
       </div>
 
       <!-- Live predict panel -->
@@ -307,19 +333,60 @@
 
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
-// Set API_URL to your deployed backend, or null to use static GeoJSON only.
-const API_URL     = null;            // e.g. "https://your-api.railway.app"
+// Optional: add your free Cesium Ion token at https://cesium.com/ion/signup
+// for high-resolution terrain. Leave empty to use flat ellipsoid (free).
+const ION_TOKEN   = "";
+const API_URL     = null;   // e.g. "https://your-api.railway.app"
 const GEOJSON_URL = "data/predictions.geojson";
 
-// ── Map init ──────────────────────────────────────────────────────────────────
-const map = L.map("map", { zoomControl: true }).setView([0, 20], 4);
+if (ION_TOKEN) Cesium.Ion.defaultAccessToken = ION_TOKEN;
 
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-  attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
-  maxZoom: 19,
-}).addTo(map);
+// ── CesiumJS Viewer ───────────────────────────────────────────────────────────
+const viewer = new Cesium.Viewer("cesium-container", {
+  // CartoDB Dark Matter — no token needed
+  imageryProvider: new Cesium.UrlTemplateImageryProvider({
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    subdomains: ["a", "b", "c", "d"],
+    maximumLevel: 19,
+    credit: new Cesium.Credit("© OpenStreetMap contributors, © CARTO"),
+  }),
+  // Flat terrain — no Ion token needed
+  terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+  baseLayerPicker:       false,
+  geocoder:              false,
+  homeButton:            false,
+  sceneModePicker:       false,
+  navigationHelpButton:  false,
+  animation:             false,
+  timeline:              false,
+  fullscreenButton:      false,
+  vrButton:              false,
+  infoBox:               false,
+  selectionIndicator:    false,
+  skyBox:                false,
+  skyAtmosphere:         false,
+  backgroundColor:       Cesium.Color.fromCssColorString("#0f1117"),
+});
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Dark scene background
+viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0f1117");
+viewer.scene.globe.baseColor  = Cesium.Color.fromCssColorString("#161923");
+
+// Fly to Africa on load
+viewer.camera.flyTo({
+  destination: Cesium.Cartesian3.fromDegrees(20, 0, 8000000),
+  orientation: { heading: 0, pitch: Cesium.Math.toRadians(-60), roll: 0 },
+  duration: 2,
+});
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let allFeatures  = [];
+let entities     = [];
+let activeLayer  = "composite";
+let currentYear  = 2023;
+let playTimer    = null;
+
+// ── Colour helpers ────────────────────────────────────────────────────────────
 function scoreColor(score) {
   if (score === null || score === undefined) return "#64748b";
   if (score >= 70) return "#22c55e";
@@ -327,94 +394,166 @@ function scoreColor(score) {
   return "#ef4444";
 }
 
-function barColor(score) {
-  return scoreColor(score);
+function cesiumColor(score) {
+  return Cesium.Color.fromCssColorString(scoreColor(score));
 }
 
 function fmt(v) { return v !== null && v !== undefined ? v.toFixed(1) + "%" : "N/A"; }
-
 function avg(arr) {
   const vals = arr.filter(v => v !== null && v !== undefined);
-  return vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : null;
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
 }
 
-// ── Load & render GeoJSON ─────────────────────────────────────────────────────
-let allFeatures = [];
+// ── Layer toggle ──────────────────────────────────────────────────────────────
+const LAYER_PROP = {
+  composite: "composite_score",
+  sdg1:      "sdg1_score",
+  sdg7:      "sdg7_score",
+  sdg11:     "sdg11_score",
+};
 
-function renderMarkers(geojson) {
+function setLayer(layer, btn) {
+  activeLayer = layer;
+  document.querySelectorAll(".layer-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  recolorEntities();
+}
+
+function recolorEntities() {
+  const prop = LAYER_PROP[activeLayer];
+  entities.forEach(({ entity, feat }) => {
+    entity.point.color = cesiumColor(feat.properties[prop]);
+  });
+}
+
+// ── Timeline ──────────────────────────────────────────────────────────────────
+function onYearChange(val) {
+  currentYear = parseInt(val, 10);
+  document.getElementById("year-display").textContent = currentYear;
+  // When multi-year GeoJSON is available, re-filter entities here.
+  // For now: flash a subtle opacity pulse to indicate the year changed.
+  entities.forEach(({ entity }) => {
+    entity.point.color = new Cesium.CallbackProperty(() => {
+      const prop = LAYER_PROP[activeLayer];
+      const feat  = entities.find(e => e.entity === entity)?.feat;
+      return feat ? cesiumColor(feat.properties[prop]) : Cesium.Color.SLATEGRAY;
+    }, false);
+  });
+  recolorEntities();
+}
+
+let playing = false;
+function togglePlay() {
+  playing = !playing;
+  document.getElementById("play-btn").textContent = playing ? "⏸" : "▶";
+  if (playing) {
+    playTimer = setInterval(() => {
+      const slider = document.getElementById("timeline-slider");
+      let next = parseInt(slider.value, 10) + 1;
+      if (next > parseInt(slider.max, 10)) next = parseInt(slider.min, 10);
+      slider.value = next;
+      onYearChange(next);
+    }, 1200);
+  } else {
+    clearInterval(playTimer);
+  }
+}
+
+// ── Render GeoJSON clusters ───────────────────────────────────────────────────
+function renderFeatures(geojson) {
   allFeatures = geojson.features;
+  viewer.entities.removeAll();
+  entities = [];
 
   geojson.features.forEach(feat => {
-    const p    = feat.properties;
+    const p          = feat.properties;
     const [lng, lat] = feat.geometry.coordinates;
-    const score = p.composite_score;
+    const score      = p[LAYER_PROP[activeLayer]];
 
-    const circle = L.circleMarker([lat, lng], {
-      radius: 7,
-      fillColor: scoreColor(score),
-      fillOpacity: 0.85,
-      color: "#0f1117",
-      weight: 1.5,
-    }).addTo(map);
+    const entity = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+      point: {
+        pixelSize:    9,
+        color:        cesiumColor(score),
+        outlineColor: Cesium.Color.fromCssColorString("#0f1117"),
+        outlineWidth: 1.5,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
 
-    circle.on("click", () => showSidebar(feat));
+    entities.push({ entity, feat });
   });
 
   updateStatsBar();
 }
 
-function updateStatsBar() {
-  const s1  = avg(allFeatures.map(f => f.properties.sdg1_score));
-  const s7  = avg(allFeatures.map(f => f.properties.sdg7_score));
-  const s11 = avg(allFeatures.map(f => f.properties.sdg11_score));
-  const comp = avg(allFeatures.map(f => f.properties.composite_score));
+// ── Click handler ─────────────────────────────────────────────────────────────
+const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+handler.setInputAction(click => {
+  const picked = viewer.scene.pick(click.position);
+  if (!Cesium.defined(picked) || !Cesium.defined(picked.id)) {
+    return;
+  }
+  const match = entities.find(e => e.entity === picked.id);
+  if (match) showSidebar(match.feat);
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
+// ── Stats bar ─────────────────────────────────────────────────────────────────
+function updateStatsBar() {
+  const s1   = avg(allFeatures.map(f => f.properties.sdg1_score));
+  const s7   = avg(allFeatures.map(f => f.properties.sdg7_score));
+  const s11  = avg(allFeatures.map(f => f.properties.sdg11_score));
+  const comp = avg(allFeatures.map(f => f.properties.composite_score));
   document.getElementById("stat-clusters").textContent  = allFeatures.length;
-  document.getElementById("stat-sdg1").textContent      = s1  ? s1.toFixed(1)  + "%" : "—";
-  document.getElementById("stat-sdg7").textContent      = s7  ? s7.toFixed(1)  + "%" : "—";
-  document.getElementById("stat-sdg11").textContent     = s11 ? s11.toFixed(1) + "%" : "—";
+  document.getElementById("stat-sdg1").textContent      = s1   ? s1.toFixed(1)   + "%" : "—";
+  document.getElementById("stat-sdg7").textContent      = s7   ? s7.toFixed(1)   + "%" : "—";
+  document.getElementById("stat-sdg11").textContent     = s11  ? s11.toFixed(1)  + "%" : "—";
   document.getElementById("stat-composite").textContent = comp ? comp.toFixed(1) + "%" : "—";
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function showSidebar(feat) {
-  const p = feat.properties;
+  const p          = feat.properties;
   const [lng, lat] = feat.geometry.coordinates;
 
-  // Hide empty state
   document.getElementById("empty-state").style.display    = "none";
   document.getElementById("composite-wrap").style.display = "flex";
   document.getElementById("sdg-detail").style.display     = "block";
 
   // Composite ring
-  const comp = p.composite_score ?? 0;
+  const comp         = p.composite_score ?? 0;
   const circumference = 257.6;
-  const offset = circumference - (comp / 100) * circumference;
-  const fill = document.getElementById("ring-fill");
+  const offset        = circumference - (comp / 100) * circumference;
+  const fill          = document.getElementById("ring-fill");
   fill.style.strokeDashoffset = offset;
-  fill.style.stroke = scoreColor(comp);
+  fill.style.stroke           = scoreColor(comp);
   document.getElementById("composite-num").textContent = comp.toFixed(0);
 
-  // Uncertainty
   const unc = p.uncertainty;
   document.getElementById("uncertainty-val").textContent =
     unc !== null && unc !== undefined ? "±" + unc.toFixed(3) : "—";
 
-  // Location
   document.getElementById("cluster-country").textContent = p.country || "Unknown";
-  document.getElementById("cluster-coords").textContent  =
+  document.getElementById("cluster-coords").textContent =
     lat.toFixed(4) + "°, " + lng.toFixed(4) + "°";
 
-  // SDG bars
   function setBar(numId, barId, score) {
     const pct = score !== null && score !== undefined ? score : 0;
-    document.getElementById(numId).textContent = fmt(score);
-    document.getElementById(barId).style.width      = pct + "%";
-    document.getElementById(barId).style.background = barColor(score);
+    document.getElementById(numId).textContent           = fmt(score);
+    document.getElementById(barId).style.width           = pct + "%";
+    document.getElementById(barId).style.background      = scoreColor(score);
   }
   setBar("s1-val",  "s1-bar",  p.sdg1_score);
   setBar("s7-val",  "s7-bar",  p.sdg7_score);
   setBar("s11-val", "s11-bar", p.sdg11_score);
+
+  // Fly camera to the selected cluster
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(lng, lat, 1500000),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 },
+    duration: 1.5,
+  });
 }
 
 // ── Live predict ──────────────────────────────────────────────────────────────
@@ -426,18 +565,16 @@ function onFileSelected(input) {
 }
 
 async function runPredict() {
-  const apiUrl = document.getElementById("api-url-input").value.trim() ||
-                 (API_URL ? API_URL : null);
+  const apiUrl =
+    document.getElementById("api-url-input").value.trim() || API_URL || null;
   if (!apiUrl) {
-    document.getElementById("predict-result").textContent =
-      "Enter the API URL above first.";
+    document.getElementById("predict-result").textContent = "Enter the API URL above first.";
     return;
   }
   if (!selectedFile) return;
 
   const result = document.getElementById("predict-result");
   result.textContent = "Running…";
-
   const form = new FormData();
   form.append("file", selectedFile);
 
@@ -448,18 +585,17 @@ async function runPredict() {
     result.innerHTML =
       `<strong>Wealth:</strong> ${data.wealth_index.toFixed(3)} ` +
       `(±${data.uncertainty.toFixed(3)})<br>` +
-      `<strong>Composite:</strong> ${data.composite_score}% ` +
+      `<strong>Composite:</strong> ${data.composite_score}%` +
       `| SDG1: ${data.sdg1_score}%` +
       (data.sdg7_score  ? ` | SDG7: ${data.sdg7_score}%`  : "") +
       (data.sdg11_score ? ` | SDG11: ${data.sdg11_score}%` : "");
-  } catch(e) {
+  } catch (e) {
     result.textContent = "Error: " + e.message;
   }
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 (async () => {
-  // Try API first, fall back to static file
   const urls = [];
   if (API_URL) urls.push(`${API_URL}/scores`);
   urls.push(GEOJSON_URL);
@@ -469,7 +605,7 @@ async function runPredict() {
       const res  = await fetch(url);
       if (!res.ok) continue;
       const data = await res.json();
-      renderMarkers(data);
+      renderFeatures(data);
       return;
     } catch (_) { /* try next */ }
   }

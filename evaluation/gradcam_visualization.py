@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
-from pytorch_grad_cam.utils.model_targets import RegressionScoreTarget
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
 from models.resnet_model import ResNetRegression
 from utils.config import load_config
@@ -44,7 +44,7 @@ logger.info("Loaded model from %s", checkpoint_path)
 
 target_layers = [model.model.layer4[-1]]
 cam = GradCAM(model=model, target_layers=target_layers)
-gradcam_map = cam(input_tensor=input_tensor, targets=[RegressionScoreTarget(0)])[0]
+gradcam_map = cam(input_tensor=input_tensor, targets=[ClassifierOutputTarget(0)])[0]
 
 visualization = show_cam_on_image(img_np[:, :, :3], gradcam_map, use_rgb=True)
 

@@ -1,41 +1,44 @@
 """
-Reusable training loop.  Used by both train.py (single run) and
-experiments/compare_satellites.py (multi-run comparison).
+Training loop for MultiStreamResNet — one encoder per sensor, features fused
+in an MLP head.  API mirrors trainer.run_training so experiments/compare_satellites.py
+can call either interchangeably.
+
+Run:
+    python -m training.multistream_trainer
 """
 
 import math
 import os
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm import tqdm
-from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
-import numpy as np
 
+from models.multi_stream_model import MultiStreamResNet
 from training.multi_sensor_dataset import MultiSensorDataset, sensor_channels
-from models.resnet_model import ResNetRegression
 from utils.config import load_config
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def run_training(sensors, run_name, epochs=None, csv_path=None, checkpoint_dir=None):
+def run_multistream_training(
+    sensors,
+    run_name,
+    epochs=None,
+    csv_path=None,
+    checkpoint_dir=None,
+):
     """
-    Train a ResNet regression model for the given sensor combination.
+    Train a MultiStreamResNet for the given sensor combination.
 
-    Args:
-        sensors:        list of sensor keys, e.g. ["s2", "s1", "viirs"]
-        run_name:       string label used in logs and checkpoint filename
-        epochs:         override training.epochs from config
-        csv_path:       override data.training_csv from config
-        checkpoint_dir: directory to save best model; None = don't save
-
-    Returns:
-        dict with keys: run_name, sensors, n_channels, r2, rmse, mae, best_val_loss
+    Returns the same dict schema as trainer.run_training so comparison
+    scripts can aggregate results uniformly.
     """
     cfg = load_config()
     tcfg = cfg["training"]
@@ -43,6 +46,7 @@ def run_training(sensors, run_name, epochs=None, csv_path=None, checkpoint_dir=N
     batch_size = tcfg["batch_size"]
     lr = tcfg["lr"]
     csv_path = csv_path or cfg["data"]["training_csv"]
+    dropout_p = cfg.get("model", {}).get("dropout_p", 0.3)
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -52,26 +56,24 @@ def run_training(sensors, run_name, epochs=None, csv_path=None, checkpoint_dir=N
         device = torch.device("cpu")
 
     aug = transforms.Compose([
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomVerticalFlip(p=0.5),
+        transforms.RandomHorizontalFlip(0.5),
+        transforms.RandomVerticalFlip(0.5),
     ])
 
-    train_ds = MultiSensorDataset(sensors=sensors, csv_path=csv_path, train=True, transform=aug)
+    train_ds = MultiSensorDataset(sensors=sensors, csv_path=csv_path, train=True,  transform=aug)
     val_ds   = MultiSensorDataset(sensors=sensors, csv_path=csv_path, train=False)
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=0)
     val_loader   = DataLoader(val_ds,   batch_size=batch_size, shuffle=False, num_workers=0)
 
-    n_channels = sensor_channels(sensors)
-    dropout_p = cfg.get("model", {}).get("dropout_p", 0.0)
-    model = ResNetRegression(in_channels=n_channels, dropout_p=dropout_p).to(device)
+    model = MultiStreamResNet(sensors=sensors, dropout_p=dropout_p).to(device)
 
-    # --- Stage 2: load pretrained backbone if available ---
+    # Load NTL-pretrained S2 encoder if available
     pretrained_ckpt = cfg.get("pretrain_ntl", {}).get("checkpoint")
     if pretrained_ckpt and os.path.exists(pretrained_ckpt) and "s2" in sensors:
-        model.backbone.load_state_dict(
+        model.encoders["s2"].load_state_dict(
             torch.load(pretrained_ckpt, map_location="cpu"), strict=False
         )
-        logger.info("Loaded NTL-pretrained backbone from %s", pretrained_ckpt)
+        logger.info("Loaded NTL-pretrained S2 encoder from %s", pretrained_ckpt)
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=3)
@@ -81,12 +83,13 @@ def run_training(sensors, run_name, epochs=None, csv_path=None, checkpoint_dir=N
     best_ckpt = None
     if checkpoint_dir:
         os.makedirs(checkpoint_dir, exist_ok=True)
-        best_ckpt = os.path.join(checkpoint_dir, f"{run_name.replace(' ', '_')}.pth")
+        best_ckpt = os.path.join(checkpoint_dir, f"multistream_{run_name.replace(' ', '_')}.pth")
 
-    logger.info("▶  %s | sensors=%s  channels=%d  device=%s", run_name, sensors, n_channels, device)
+    logger.info(
+        "▶  MultiStream %s | sensors=%s  device=%s", run_name, sensors, device
+    )
 
     for epoch in range(epochs):
-        # --- train ---
         model.train()
         running = 0.0
         for imgs, labels in tqdm(train_loader, desc=f"{run_name} epoch {epoch+1}/{epochs}", leave=False):
@@ -96,9 +99,7 @@ def run_training(sensors, run_name, epochs=None, csv_path=None, checkpoint_dir=N
             loss.backward()
             optimizer.step()
             running += loss.item() * imgs.size(0)
-        train_loss = running / len(train_ds)
 
-        # --- validate ---
         model.eval()
         val_running = 0.0
         with torch.no_grad():
@@ -109,8 +110,9 @@ def run_training(sensors, run_name, epochs=None, csv_path=None, checkpoint_dir=N
 
         scheduler.step(val_loss)
         logger.info(
-            "%s  epoch %d/%d  train=%.4f  val=%.4f  rmse=%.4f",
-            run_name, epoch + 1, epochs, train_loss, val_loss, math.sqrt(val_loss),
+            "MultiStream %s  epoch %d/%d  train=%.4f  val=%.4f",
+            run_name, epoch + 1, epochs,
+            running / len(train_ds), val_loss,
         )
 
         if val_loss < best_val_loss:
@@ -118,13 +120,12 @@ def run_training(sensors, run_name, epochs=None, csv_path=None, checkpoint_dir=N
             if best_ckpt:
                 torch.save(model.state_dict(), best_ckpt)
 
-    # --- final evaluation on val set ---
+    # Final evaluation
     model.eval()
     all_preds, all_labels = [], []
     with torch.no_grad():
         for imgs, labels in val_loader:
-            imgs = imgs.to(device)
-            all_preds.extend(model(imgs).cpu().numpy())
+            all_preds.extend(model(imgs.to(device)).cpu().numpy())
             all_labels.extend(labels.numpy())
 
     preds  = np.array(all_preds)
@@ -133,13 +134,23 @@ def run_training(sensors, run_name, epochs=None, csv_path=None, checkpoint_dir=N
     rmse = math.sqrt(mean_squared_error(labels, preds))
     mae  = mean_absolute_error(labels, preds)
 
-    logger.info("✔  %s | R²=%.4f  RMSE=%.4f  MAE=%.4f", run_name, r2, rmse, mae)
+    logger.info("✔  MultiStream %s | R²=%.4f  RMSE=%.4f  MAE=%.4f", run_name, r2, rmse, mae)
     return {
-        "run_name":      run_name,
+        "run_name":      f"multistream_{run_name}",
         "sensors":       "+".join(sensors),
-        "n_channels":    n_channels,
+        "n_channels":    sensor_channels(sensors),
+        "model_type":    "multi_stream",
         "r2":            round(r2,   4),
         "rmse":          round(rmse, 4),
         "mae":           round(mae,  4),
         "best_val_loss": round(best_val_loss, 6),
     }
+
+
+if __name__ == "__main__":
+    cfg = load_config()
+    run_multistream_training(
+        sensors=["s2", "s1", "viirs"],
+        run_name="s2+s1+viirs",
+        checkpoint_dir=cfg["training"]["model_dir"],
+    )

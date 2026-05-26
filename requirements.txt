@@ -4,6 +4,7 @@ pandas
 scikit-learn
 torch
 torchvision
+timm
 
 # Geospatial
 rasterio
@@ -33,7 +34,7 @@ python-multipart
 pyyaml
 
 # Model explainability
-pytorch-grad-cam
+grad-cam
 
 # Progress bars
 tqdm

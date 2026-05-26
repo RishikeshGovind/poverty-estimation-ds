@@ -74,6 +74,19 @@ model:
   dropout_p: 0.3        # MC Dropout probability; 0 = no dropout
   mc_samples: 50        # Forward passes for uncertainty estimation
 
+# ── NTL Pretraining (sustainlab technique) ────────────────────────────────────
+# Stage 1: train ResNet to predict VIIRS nighttime lights from S2 patches.
+# The pretrained backbone is then loaded by trainer.py as a warm start.
+pretrain_ntl:
+  epochs: 10
+  lr: 1.0e-4
+  checkpoint: outputs/models/pretrain_ntl_backbone.pth
+
+# ── Multi-stream model ────────────────────────────────────────────────────────
+# One ResNet18 encoder per sensor; fused in an MLP head.
+multistream:
+  checkpoint: outputs/models/multistream_best.pth
+
 # Multi-task SDG proxy heads
 tasks:
   names: [sdg1_wealth, sdg7_ntl, sdg11_buildup]
