@@ -11,6 +11,11 @@ data/*.docx
 # Keep the data directory itself but not its contents
 !data/.gitkeep
 
+# ── GitHub Pages data ─────────────────────────────────────────────────────────
+# predictions.geojson is generated and MUST be committed for GitHub Pages to work
+!docs/data/predictions.geojson
+!docs/data/.gitkeep
+
 # ── Model outputs ─────────────────────────────────────────────────────────────
 outputs/
 *.pth

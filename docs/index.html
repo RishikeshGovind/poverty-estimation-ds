@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Poverty &amp; SDG Monitor — Sub-Saharan Africa</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2a2d3e;
+      --text:     #e2e8f0;
+      --muted:    #8892a4;
+      --accent:   #6366f1;
+      --green:    #22c55e;
+      --yellow:   #eab308;
+      --red:      #ef4444;
+      --radius:   10px;
+    }
+
+    html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
+
+    /* ── Layout ── */
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    header h1 { font-size: 15px; font-weight: 600; white-space: nowrap; }
+    header h1 span { color: var(--accent); }
+
+    #stats-bar {
+      display: flex; gap: 16px; flex-wrap: wrap; margin-left: auto;
+    }
+
+    .stat {
+      display: flex; flex-direction: column; align-items: flex-end;
+      line-height: 1.2;
+    }
+    .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .stat-value { font-size: 14px; font-weight: 600; }
+
+    #main { display: flex; flex: 1; overflow: hidden; }
+
+    #map { flex: 1; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 300px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .panel { padding: 16px; border-bottom: 1px solid var(--border); }
+    .panel-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 12px; }
+
+    /* ── Selected cluster ── */
+    #cluster-country { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+    #cluster-coords  { font-size: 11px; color: var(--muted); font-family: monospace; margin-bottom: 14px; }
+
+    /* ── SDG score rows ── */
+    .sdg-row { margin-bottom: 14px; }
+    .sdg-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+    .sdg-name  { font-size: 12px; font-weight: 500; }
+    .sdg-badge { font-size: 10px; color: var(--muted); background: var(--bg); padding: 2px 6px; border-radius: 4px; }
+    .sdg-score-val { font-size: 13px; font-weight: 700; }
+
+    .progress-track {
+      height: 6px; background: var(--bg); border-radius: 99px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; border-radius: 99px;
+      transition: width .4s ease;
+    }
+
+    /* ── Composite score ring ── */
+    #composite-wrap { display: flex; flex-direction: column; align-items: center; padding: 20px 16px; border-bottom: 1px solid var(--border); }
+    #composite-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+    #composite-ring  { position: relative; width: 90px; height: 90px; }
+    #composite-ring svg { transform: rotate(-90deg); }
+    #composite-ring circle { fill: none; stroke-width: 8; }
+    .ring-bg   { stroke: var(--bg); }
+    .ring-fill { stroke-linecap: round; transition: stroke-dashoffset .5s ease; }
+    #composite-text {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    #composite-num  { font-size: 22px; font-weight: 700; line-height: 1; }
+    #composite-unit { font-size: 10px; color: var(--muted); }
+
+    /* ── Uncertainty ── */
+    #uncertainty-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+    #uncertainty-label { font-size: 11px; color: var(--muted); }
+    #uncertainty-val   { font-size: 12px; font-weight: 500; }
+
+    /* ── Empty state ── */
+    #empty-state { padding: 32px 16px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6; }
+    #empty-state svg { margin-bottom: 10px; opacity: .4; }
+
+    /* ── Predict panel ── */
+    #predict-panel { padding: 16px; }
+    #predict-panel .panel-title { margin-bottom: 12px; }
+
+    .upload-area {
+      border: 1.5px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s;
+      margin-bottom: 10px;
+    }
+    .upload-area:hover { border-color: var(--accent); }
+    .upload-area p { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    #file-input { display: none; }
+
+    .btn {
+      width: 100%; padding: 9px; border-radius: var(--radius);
+      font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+      background: var(--accent); color: #fff; transition: opacity .2s;
+    }
+    .btn:disabled { opacity: .4; cursor: default; }
+    .btn:not(:disabled):hover { opacity: .85; }
+
+    #api-url-input {
+      width: 100%; padding: 7px 10px; border-radius: var(--radius);
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); font-size: 11px; font-family: monospace;
+      margin-bottom: 8px;
+    }
+    #predict-result { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; min-height: 18px; }
+
+    /* ── Legend ── */
+    #legend {
+      position: absolute; bottom: 30px; left: 10px; z-index: 1000;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 10px 14px;
+      font-size: 11px; color: var(--text);
+    }
+    #legend-title { font-weight: 600; margin-bottom: 6px; }
+    .legend-row    { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+    .legend-dot    { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Leaflet popup override ── */
+    .leaflet-popup-content-wrapper {
+      background: var(--surface) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: var(--radius) !important;
+      box-shadow: 0 4px 20px rgba(0,0,0,.5) !important;
+    }
+    .leaflet-popup-tip { background: var(--surface) !important; }
+    .leaflet-popup-content { font-size: 12px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <header>
+    <h1>🌍 Poverty &amp; <span>SDG Monitor</span> — Sub-Saharan Africa</h1>
+    <div id="stats-bar">
+      <div class="stat">
+        <span class="stat-label">Clusters</span>
+        <span class="stat-value" id="stat-clusters">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Avg SDG 1</span>
+        <span class="stat-value" id="stat-sdg1">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Avg SDG 7</span>
+        <span class="stat-value" id="stat-sdg7">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Avg SDG 11</span>
+        <span class="stat-value" id="stat-sdg11">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Composite</span>
+        <span class="stat-value" id="stat-composite">—</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="main">
+    <!-- Map -->
+    <div id="map">
+      <div id="legend">
+        <div id="legend-title">Composite SDG Score</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#22c55e"></div> High (70–100)</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#eab308"></div> Medium (40–69)</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#ef4444"></div> Low (0–39)</div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <!-- Composite ring (hidden until selection) -->
+      <div id="composite-wrap" style="display:none">
+        <div id="composite-label">Composite SDG Score</div>
+        <div id="composite-ring">
+          <svg viewBox="0 0 90 90" width="90" height="90">
+            <circle class="ring-bg" cx="45" cy="45" r="41" />
+            <circle class="ring-fill" id="ring-fill" cx="45" cy="45" r="41"
+              stroke-dasharray="257.6" stroke-dashoffset="257.6" />
+          </svg>
+          <div id="composite-text">
+            <span id="composite-num">0</span>
+            <span id="composite-unit">/ 100</span>
+          </div>
+        </div>
+        <div id="uncertainty-row">
+          <span id="uncertainty-label">Wealth index uncertainty</span>
+          <span id="uncertainty-val">—</span>
+        </div>
+      </div>
+
+      <!-- SDG detail panel (hidden until selection) -->
+      <div class="panel" id="sdg-detail" style="display:none">
+        <div class="panel-title">SDG Breakdown</div>
+        <div id="cluster-country"></div>
+        <div id="cluster-coords"></div>
+
+        <div class="sdg-row">
+          <div class="sdg-header">
+            <span class="sdg-name">SDG 1 — No Poverty</span>
+            <span class="sdg-score-val" id="s1-val">—</span>
+          </div>
+          <div class="sdg-badge">Proxy: DHS Wealth Index</div>
+          <div class="progress-track" style="margin-top:6px">
+            <div class="progress-fill" id="s1-bar" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="sdg-row">
+          <div class="sdg-header">
+            <span class="sdg-name">SDG 7 — Clean Energy</span>
+            <span class="sdg-score-val" id="s7-val">—</span>
+          </div>
+          <div class="sdg-badge">Proxy: VIIRS Nighttime Lights</div>
+          <div class="progress-track" style="margin-top:6px">
+            <div class="progress-fill" id="s7-bar" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="sdg-row">
+          <div class="sdg-header">
+            <span class="sdg-name">SDG 11 — Sustainable Cities</span>
+            <span class="sdg-score-val" id="s11-val">—</span>
+          </div>
+          <div class="sdg-badge">Proxy: S2 Mean Brightness</div>
+          <div class="progress-track" style="margin-top:6px">
+            <div class="progress-fill" id="s11-bar" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state (shown before any selection) -->
+      <div id="empty-state">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <p>Click a cluster on the map to see its SDG scores and poverty estimate.</p>
+      </div>
+
+      <!-- Live predict panel -->
+      <div id="predict-panel">
+        <div class="panel-title">Live Prediction</div>
+        <input id="api-url-input" placeholder="API URL (e.g. http://localhost:8000)" />
+        <div class="upload-area" onclick="document.getElementById('file-input').click()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto;display:block">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <p>Upload .npy Sentinel-2 patch</p>
+          <input type="file" id="file-input" accept=".npy,.jpg,.jpeg,.png" onchange="onFileSelected(this)" />
+        </div>
+        <button class="btn" id="predict-btn" disabled onclick="runPredict()">Predict</button>
+        <div id="predict-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+// Set API_URL to your deployed backend, or null to use static GeoJSON only.
+const API_URL     = null;            // e.g. "https://your-api.railway.app"
+const GEOJSON_URL = "data/predictions.geojson";
+
+// ── Map init ──────────────────────────────────────────────────────────────────
+const map = L.map("map", { zoomControl: true }).setView([0, 20], 4);
+
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function scoreColor(score) {
+  if (score === null || score === undefined) return "#64748b";
+  if (score >= 70) return "#22c55e";
+  if (score >= 40) return "#eab308";
+  return "#ef4444";
+}
+
+function barColor(score) {
+  return scoreColor(score);
+}
+
+function fmt(v) { return v !== null && v !== undefined ? v.toFixed(1) + "%" : "N/A"; }
+
+function avg(arr) {
+  const vals = arr.filter(v => v !== null && v !== undefined);
+  return vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : null;
+}
+
+// ── Load & render GeoJSON ─────────────────────────────────────────────────────
+let allFeatures = [];
+
+function renderMarkers(geojson) {
+  allFeatures = geojson.features;
+
+  geojson.features.forEach(feat => {
+    const p    = feat.properties;
+    const [lng, lat] = feat.geometry.coordinates;
+    const score = p.composite_score;
+
+    const circle = L.circleMarker([lat, lng], {
+      radius: 7,
+      fillColor: scoreColor(score),
+      fillOpacity: 0.85,
+      color: "#0f1117",
+      weight: 1.5,
+    }).addTo(map);
+
+    circle.on("click", () => showSidebar(feat));
+  });
+
+  updateStatsBar();
+}
+
+function updateStatsBar() {
+  const s1  = avg(allFeatures.map(f => f.properties.sdg1_score));
+  const s7  = avg(allFeatures.map(f => f.properties.sdg7_score));
+  const s11 = avg(allFeatures.map(f => f.properties.sdg11_score));
+  const comp = avg(allFeatures.map(f => f.properties.composite_score));
+
+  document.getElementById("stat-clusters").textContent  = allFeatures.length;
+  document.getElementById("stat-sdg1").textContent      = s1  ? s1.toFixed(1)  + "%" : "—";
+  document.getElementById("stat-sdg7").textContent      = s7  ? s7.toFixed(1)  + "%" : "—";
+  document.getElementById("stat-sdg11").textContent     = s11 ? s11.toFixed(1) + "%" : "—";
+  document.getElementById("stat-composite").textContent = comp ? comp.toFixed(1) + "%" : "—";
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function showSidebar(feat) {
+  const p = feat.properties;
+  const [lng, lat] = feat.geometry.coordinates;
+
+  // Hide empty state
+  document.getElementById("empty-state").style.display    = "none";
+  document.getElementById("composite-wrap").style.display = "flex";
+  document.getElementById("sdg-detail").style.display     = "block";
+
+  // Composite ring
+  const comp = p.composite_score ?? 0;
+  const circumference = 257.6;
+  const offset = circumference - (comp / 100) * circumference;
+  const fill = document.getElementById("ring-fill");
+  fill.style.strokeDashoffset = offset;
+  fill.style.stroke = scoreColor(comp);
+  document.getElementById("composite-num").textContent = comp.toFixed(0);
+
+  // Uncertainty
+  const unc = p.uncertainty;
+  document.getElementById("uncertainty-val").textContent =
+    unc !== null && unc !== undefined ? "±" + unc.toFixed(3) : "—";
+
+  // Location
+  document.getElementById("cluster-country").textContent = p.country || "Unknown";
+  document.getElementById("cluster-coords").textContent  =
+    lat.toFixed(4) + "°, " + lng.toFixed(4) + "°";
+
+  // SDG bars
+  function setBar(numId, barId, score) {
+    const pct = score !== null && score !== undefined ? score : 0;
+    document.getElementById(numId).textContent = fmt(score);
+    document.getElementById(barId).style.width      = pct + "%";
+    document.getElementById(barId).style.background = barColor(score);
+  }
+  setBar("s1-val",  "s1-bar",  p.sdg1_score);
+  setBar("s7-val",  "s7-bar",  p.sdg7_score);
+  setBar("s11-val", "s11-bar", p.sdg11_score);
+}
+
+// ── Live predict ──────────────────────────────────────────────────────────────
+let selectedFile = null;
+
+function onFileSelected(input) {
+  selectedFile = input.files[0] || null;
+  document.getElementById("predict-btn").disabled = !selectedFile;
+}
+
+async function runPredict() {
+  const apiUrl = document.getElementById("api-url-input").value.trim() ||
+                 (API_URL ? API_URL : null);
+  if (!apiUrl) {
+    document.getElementById("predict-result").textContent =
+      "Enter the API URL above first.";
+    return;
+  }
+  if (!selectedFile) return;
+
+  const result = document.getElementById("predict-result");
+  result.textContent = "Running…";
+
+  const form = new FormData();
+  form.append("file", selectedFile);
+
+  try {
+    const res  = await fetch(`${apiUrl}/predict`, { method: "POST", body: form });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    result.innerHTML =
+      `<strong>Wealth:</strong> ${data.wealth_index.toFixed(3)} ` +
+      `(±${data.uncertainty.toFixed(3)})<br>` +
+      `<strong>Composite:</strong> ${data.composite_score}% ` +
+      `| SDG1: ${data.sdg1_score}%` +
+      (data.sdg7_score  ? ` | SDG7: ${data.sdg7_score}%`  : "") +
+      (data.sdg11_score ? ` | SDG11: ${data.sdg11_score}%` : "");
+  } catch(e) {
+    result.textContent = "Error: " + e.message;
+  }
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+(async () => {
+  // Try API first, fall back to static file
+  const urls = [];
+  if (API_URL) urls.push(`${API_URL}/scores`);
+  urls.push(GEOJSON_URL);
+
+  for (const url of urls) {
+    try {
+      const res  = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      renderMarkers(data);
+      return;
+    } catch (_) { /* try next */ }
+  }
+
+  document.getElementById("empty-state").innerHTML =
+    "<p>Could not load predictions.geojson.<br>" +
+    "Run <code>python -m scoring.generate_geojson</code> then commit docs/data/predictions.geojson.</p>";
+})();
+</script>
+</body>
+</html>

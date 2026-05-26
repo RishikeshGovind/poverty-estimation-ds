@@ -53,9 +53,22 @@ evaluation:
   checkpoint: outputs/models/best_model.pth
   scatter_plot: outputs/metrics/scatter_plot.png
 
+scoring:
+  output_geojson: docs/data/predictions.geojson
+  sdg1:
+    min: -2.0     # Poorest DHS wealth index
+    max:  2.0     # Wealthiest DHS wealth index
+  sdg7:
+    ntl_threshold: 0.2   # Normalised NTL value that maps to 100% score
+  sdg11:
+    buildup_threshold: 0.3  # S2 brightness that maps to 100% score
+
 api:
   host: "127.0.0.1"
   port: 8000
+  # Set to your deployed API URL when hosting; "*" is fine for local dev
+  cors_origins: ["*"]
+  geojson_path: docs/data/predictions.geojson
 
 model:
   dropout_p: 0.3        # MC Dropout probability; 0 = no dropout
