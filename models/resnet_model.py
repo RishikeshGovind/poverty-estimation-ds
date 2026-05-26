@@ -21,15 +21,20 @@ class ResNetRegression(nn.Module):
             padding=old_conv.padding,
             bias=old_conv.bias is not None
         )
-        # If in_channels != 3, average weights or initialize
         if in_channels != 3:
             with torch.no_grad():
-                if in_channels > 3:
-                    self.model.conv1.weight[:, :3] = old_conv.weight
-                    for i in range(3, in_channels):
-                        self.model.conv1.weight[:, i] = old_conv.weight[:, 0]
+                if in_channels < 3:
+                    self.model.conv1.weight = nn.Parameter(
+                        old_conv.weight[:, :in_channels].clone()
+                    )
                 else:
-                    self.model.conv1.weight[:, :in_channels] = old_conv.weight[:, :in_channels]
+                    # Copy RGB weights into first 3 channels; initialise extra
+                    # channels as the mean of the RGB weights (better than
+                    # duplicating a single channel).
+                    self.model.conv1.weight[:, :3] = old_conv.weight
+                    mean_w = old_conv.weight.mean(dim=1, keepdim=True)
+                    for i in range(3, in_channels):
+                        self.model.conv1.weight[:, i] = mean_w.squeeze(1)
         # 3. Replace classification head with regression head
         num_features = self.model.fc.in_features
         self.model.fc = nn.Linear(num_features, 1)
