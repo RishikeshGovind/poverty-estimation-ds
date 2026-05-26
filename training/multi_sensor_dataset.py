@@ -1,17 +1,20 @@
 """
-MultiSensorDataset — loads patches from one or more of: S2, S1, VIIRS.
+MultiSensorDataset — loads patches from any combination of sensors.
 
-Sensors are specified as a list, e.g. ["s2", "s1"] or ["s2", "s1", "viirs"].
+Sensors are specified as a list, e.g. ["s2", "s1", "viirs", "worldcover", "hrsl"].
 Each sensor's patch is normalised independently then all channels are
 concatenated along axis-0 before being returned as a single tensor.
 
-Channel layout (when all sensors present):
-  [0:3]  S2  — B04, B03, B02  (3 ch, normalised /10000)
-  [3:5]  S1  — VV, VH          (2 ch, clipped /0.5)
-  [5:6]  VIIRS — DNB            (1 ch, clipped /200)
+Full channel layout (all sensors):
+  [0:3]  S2          — B04, B03, B02           (3 ch, /10000)
+  [3:5]  S1          — VV, VH                  (2 ch, /0.5)
+  [5:6]  VIIRS       — DNB nighttime lights     (1 ch, /200)
+  [6:7]  WorldCover  — ESA land-use class /100  (1 ch, Phase 2)
+  [7:8]  HRSL        — Meta population density  (1 ch, Phase 2)
+  [8:9]  Buildings   — building density raster  (1 ch, Phase 3)
+  [9:15] Landsat     — B,G,R,NIR,SWIR1,SWIR2   (6 ch, Phase 4)
 
-If a patch file is missing for a sample that sensor's channels are filled
-with zeros so the batch shape is always consistent.
+If a patch file is missing, that sensor's channels are filled with zeros.
 """
 
 import torch
@@ -27,12 +30,21 @@ logger = get_logger(__name__)
 
 # Sensor metadata: (csv_column, n_bands, norm_config_key, norm_attr)
 _SENSOR_META = {
-    "s2":    ("s2_patch_file",    3, "sentinel2",  "normalization_factor"),
-    "s1":    ("s1_patch_file",    2, "sentinel1",  "normalization_clip"),
-    "viirs": ("viirs_patch_file", 1, "viirs",      "normalization_clip"),
+    # ── Phase 1 (original) ────────────────────────────────────────────────────
+    "s2":         ("s2_patch_file",         3, "sentinel2",  "normalization_factor"),
+    "s1":         ("s1_patch_file",         2, "sentinel1",  "normalization_clip"),
+    "viirs":      ("viirs_patch_file",      1, "viirs",      "normalization_clip"),
+    # ── Phase 2 ───────────────────────────────────────────────────────────────
+    "worldcover": ("worldcover_patch_file", 1, "worldcover", "normalization_clip"),
+    "hrsl":       ("hrsl_patch_file",       1, "hrsl",       "normalization_clip"),
+    # ── Phase 3 ───────────────────────────────────────────────────────────────
+    "buildings":  ("buildings_patch_file",  1, "buildings",  "normalization_clip"),
+    # ── Phase 4 ───────────────────────────────────────────────────────────────
+    "landsat":    ("landsat_patch_file",    6, "landsat",    "normalization_factor"),
 }
 
-ALL_SENSORS = ["s2", "s1", "viirs"]
+ALL_SENSORS = ["s2", "s1", "viirs", "worldcover", "hrsl", "buildings", "landsat"]
+BASE_SENSORS = ["s2", "s1", "viirs"]   # original 6-channel set
 
 
 def sensor_channels(sensors):

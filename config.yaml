@@ -87,6 +87,68 @@ pretrain_ntl:
 multistream:
   checkpoint: outputs/models/multistream_best.pth
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 1 — Alternative label sources
+# ─────────────────────────────────────────────────────────────────────────────
+lsms:
+  output_csv: data/lsms_survey.csv
+  countries:
+    # Download from https://www.worldbank.org/en/programs/lsms/initiatives/lsms-ISA
+    # Set paths after downloading the Stata .dta files for each country.
+    Ethiopia: { household_path: "", gps_path: "" }
+    Nigeria:  { household_path: "", gps_path: "" }
+    Tanzania: { household_path: "", gps_path: "" }
+    Uganda:   { household_path: "", gps_path: "" }
+
+kidsat:
+  output_dir: data/kidsat
+  # Set max_samples to a small number for testing; null = all 33k
+  max_samples: null
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2 — ESA WorldCover + Meta HRSL (new image channels)
+# ─────────────────────────────────────────────────────────────────────────────
+worldcover:
+  year: "2021"
+  tiles_dir: data/raw/worldcover
+  patches_dir: data/patches/worldcover
+  normalization_clip: 1.0   # classes already divided by 100 → [0, 1]
+
+hrsl:
+  tiles_dir: data/raw/hrsl
+  patches_dir: data/patches/hrsl
+  normalization_clip: 1.0   # clipped /1000 → [0, 1] in extract function
+  countries: [Kenya, Nigeria, Ethiopia, Ghana, Tanzania, Rwanda, Malawi]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3 — Building density channel
+# ─────────────────────────────────────────────────────────────────────────────
+buildings:
+  cache_dir: data/raw/buildings
+  patches_dir: data/patches/buildings
+  normalization_clip: 1.0   # density already normalised in extractor
+  source: "google"          # "google" | "microsoft"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 4 — Landsat (SWIR + 40-year history)
+# ─────────────────────────────────────────────────────────────────────────────
+landsat:
+  bbox: [36.7, -1.35, 36.9, -1.15]   # same as sentinel2.bbox
+  date_range: "2023-01-01/2023-12-31"
+  max_cloud_cover: 10
+  output_path: data/raw/landsat.tif
+  patches_dir: data/patches/landsat
+  normalization_factor: 1.0   # extract_landsat_patch already scales to [0,1]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 5 — OSM accessibility features
+# ─────────────────────────────────────────────────────────────────────────────
+osm:
+  # max_clusters: null means process all; set to 10 for a quick test
+  max_clusters: null
+  radius_amenity_m: 5000
+  radius_road_m: 5000
+
 # Multi-task SDG proxy heads
 tasks:
   names: [sdg1_wealth, sdg7_ntl, sdg11_buildup]

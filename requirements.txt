@@ -38,3 +38,12 @@ grad-cam
 
 # Progress bars
 tqdm
+
+# Phase 1 — KidSat + LSMS
+huggingface_hub
+
+# Phase 3 — Building footprints
+requests
+
+# Phase 5 — OSM accessibility features
+osmnx
