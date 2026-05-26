@@ -1,9 +1,39 @@
-# Basic requirements for geospatial AI poverty estimation
+# Core data / ML
 numpy
 pandas
-matplotlib
 scikit-learn
+torch
+torchvision
+
+# Geospatial
 rasterio
 geopandas
-opencv-python
+shapely
+pyproj
+pystac-client
+planetary-computer
+
+# NASA Earthdata (VIIRS nighttime lights)
+earthaccess
+
+# DHS household recode (Stata .DTA files)
+pyreadstat
+
+# Visualization
+matplotlib
+folium
 jupyter
+
+# API server
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Config
+pyyaml
+
+# Model explainability
+pytorch-grad-cam
+
+# Progress bars
+tqdm

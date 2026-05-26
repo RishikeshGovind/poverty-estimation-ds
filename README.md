@@ -24,7 +24,3 @@ This project uses geospatial AI to predict poverty levels from satellite images.
 ## Requirements
 See `requirements.txt` for a list of required Python packages.
 
-## Notes
-- Keep code modular and beginner-friendly.
-- Add comments to all scripts.
-- Use the provided folders to organize your work.

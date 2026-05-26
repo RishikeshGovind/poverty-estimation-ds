@@ -4,12 +4,40 @@ data:
   patches_dir: data/patches
   training_csv: data/training_dataset.csv
   predictions_csv: data/predictions.csv
+  # Sentinel-1 and VIIRS outputs
+  sentinel1_path: data/raw/kenya_sentinel1.tif
+  viirs_path: data/raw/kenya_viirs.tif
 
 sentinel2:
   bbox: [36.7, -1.35, 36.9, -1.15]
   date_range: "2023-01-01/2023-12-31"
   max_cloud_cover: 10
   normalization_factor: 10000
+
+sentinel1:
+  bbox: [36.7, -1.35, 36.9, -1.15]
+  date_range: "2023-01-01/2023-12-31"
+  # VV = co-polarization (structure/roughness), VH = cross-polarization (vegetation/volume)
+  polarizations: ["vv", "vh"]
+  # S1 RTC backscatter is linear power scale; clip to [0, 0.5] before /0.5 to [0, 1]
+  normalization_clip: 0.5
+
+viirs:
+  bbox: [36.7, -1.35, 36.9, -1.15]
+  # NASA Earthdata short name for VIIRS monthly Black Marble gap-filled composites
+  short_name: "VNP46A2"
+  year: 2023
+  # Radiance values in nW/cm²/sr; bright urban ~200, rural dark ~0–5
+  normalization_clip: 200.0
+
+dhs:
+  # Leave blank to use synthetic data. Set these after registering at dhsprogram.com.
+  # GPS cluster file: CSV/shapefile with DHSCLUST, LATNUM, LONGNUM columns
+  gps_path: ""
+  # Household recode: Stata .DTA file with hv001 (cluster ID) and hv271 (wealth score)
+  hr_path: ""
+  # hv271 is stored as score * 100000 in DHS files
+  wealth_scale_factor: 100000
 
 training:
   batch_size: 16
