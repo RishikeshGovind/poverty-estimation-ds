@@ -48,21 +48,23 @@ export default function Globe({ onCountryClick }: Props) {
       scene3DOnly: true,
     });
 
-    // Remove default Bing Maps/Ion layer
+    // Remove default Bing Maps/Ion layer — we manage all imagery ourselves
     viewer.imageryLayers.removeAll();
 
-    // Dark CartoDB base map
+    // Pure black ocean/land base — gives the "Earth at night from space" look
+    viewer.scene.globe.baseColor = Cesium.Color.BLACK;
+    viewer.scene.backgroundColor = Cesium.Color.BLACK;
+
+    // Subtle country-borders-only tile layer (very low opacity, just for geography reference)
     viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-        credit: "© CartoDB © OpenStreetMap",
+        credit: "© CartoDB",
         minimumLevel: 0,
         maximumLevel: 19,
       })
     );
-
-    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0b0e1a");
-    viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0b0e1a");
+    viewer.imageryLayers.get(0).alpha = 0.25; // barely visible — just ghost borders
 
     // Focus on Africa
     viewer.camera.setView({
@@ -108,12 +110,13 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.nightlights.enabled) {
       if (!nlLayerRef.current) {
+        // {TileMatrixSet} → "500m", {TileMatrix} → zoom level, {TileRow}/{TileCol} → tile coords
         nlLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.WebMapTileServiceImageryProvider({
-            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_Black_Marble_Annual_2023/default/2023-01-01/500m/{TileMatrixSet}/{TileRow}/{TileCol}.jpg",
-            layer: "VIIRS_Black_Marble_Annual_2023",
+            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_SNPP_DayNightBand_ENCC/default/2023-10-01/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
+            layer: "VIIRS_SNPP_DayNightBand_ENCC",
             style: "default",
-            format: "image/jpeg",
+            format: "image/png",
             tileMatrixSetID: "500m",
             maximumLevel: 8,
             tilingScheme: new Cesium.GeographicTilingScheme(),
@@ -136,7 +139,7 @@ export default function Globe({ onCountryClick }: Props) {
       if (!ndviLayerRef.current) {
         ndviLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.WebMapTileServiceImageryProvider({
-            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_NDVI_8Day/default/2023-01-01/250m/{TileMatrixSet}/{TileRow}/{TileCol}.png",
+            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_NDVI_8Day/default/2023-01-01/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
             layer: "MODIS_Terra_NDVI_8Day",
             style: "default",
             format: "image/png",
