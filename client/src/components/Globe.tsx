@@ -168,11 +168,10 @@ export default function Globe({ onCountryClick }: Props) {
         viewer.entities.add({
           position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat),
           point: {
-            pixelSize: 16,
+            pixelSize: 5,
             color: povertyColor(f.poverty_rate, layers.poverty.opacity),
-            outlineColor: Cesium.Color.WHITE.withAlpha(0.25),
-            outlineWidth: 1,
-            scaleByDistance: new Cesium.NearFarScalar(1.5e6, 1.4, 8e6, 0.5),
+            outlineWidth: 0,
+            scaleByDistance: new Cesium.NearFarScalar(8e5, 1.8, 8e6, 0.4),
             disableDepthTestDistance: Number.POSITIVE_INFINITY,
           },
           properties: new Cesium.PropertyBag({ featureData: f }),

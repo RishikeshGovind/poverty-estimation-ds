@@ -64,8 +64,22 @@ function InsightCard({ f, rank }: { f: PovertyFeature; rank: number }) {
 export default function InsightsFeed() {
   const { povertyFeatures } = useGlobeStore();
 
-  const sorted = [...povertyFeatures]
-    .filter((f) => f.poverty_rate != null)
+  // Aggregate clusters by country — many DHS clusters → one card per country
+  const countryMap = new Map<string, { sum: number; count: number; rep: PovertyFeature }>();
+  povertyFeatures.filter((f) => f.poverty_rate != null).forEach((f) => {
+    if (!countryMap.has(f.country)) {
+      countryMap.set(f.country, { sum: 0, count: 0, rep: f });
+    }
+    const e = countryMap.get(f.country)!;
+    e.sum += f.poverty_rate ?? 0;
+    e.count++;
+  });
+  const aggregated: PovertyFeature[] = Array.from(countryMap.values()).map(({ sum, count, rep }) => ({
+    ...rep,
+    poverty_rate: sum / count,
+  }));
+
+  const sorted = aggregated
     .sort((a, b) => (b.poverty_rate ?? 0) - (a.poverty_rate ?? 0))
     .slice(0, 15);
 
@@ -82,7 +96,7 @@ export default function InsightsFeed() {
         {sorted.length === 0 ? (
           <div className="p-4 text-xs text-slate-500 text-center">Loading data…</div>
         ) : (
-          sorted.map((f, i) => <InsightCard key={f.iso3} f={f} rank={i + 1} />)
+          sorted.map((f, i) => <InsightCard key={f.country} f={f} rank={i + 1} />)
         )}
       </div>
 
