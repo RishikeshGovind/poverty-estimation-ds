@@ -29,13 +29,13 @@ interface Props {
 export default function RegionPopup({ feature: f }: Props) {
   const setSelected = useGlobeStore((s) => s.setSelected);
 
-  // Cluster features have generated iso3 keys; country features have 3-letter codes
-  const isCluster = !/^[A-Z]{3}$/.test(f.iso3);
+  // Cluster features encode place info as "CLUSTER|adm1|urban"
+  const isCluster = f.iso3.startsWith("CLUSTER|");
+  const [, adm1Name = "", urbanRural = ""] = isCluster ? f.iso3.split("|") : [];
   const pTrend = f.ntl_trend.length >= 2
     ? f.ntl_trend[f.ntl_trend.length - 1] - f.ntl_trend[0]
     : 0;
 
-  // hdi stores normalised wealth index [0,1] for cluster features
   const wealthIndex = isCluster && f.hdi != null ? (f.hdi * 4 - 2) : null;
   const countrySlug = f.country.toLowerCase().replace(/\s+/g, "-");
 
@@ -47,7 +47,7 @@ export default function RegionPopup({ feature: f }: Props) {
           <h3 className="text-sm font-semibold text-white">{f.country}</h3>
           <span className="text-[10px] text-slate-500 font-mono">
             {isCluster
-              ? `DHS Cluster · ${f.lat.toFixed(3)}°, ${f.lon.toFixed(3)}°`
+              ? `${adm1Name || f.country}${urbanRural ? ` · ${urbanRural}` : ""} · DHS 2022`
               : `${f.iso3} · ${f.year}`}
           </span>
         </div>

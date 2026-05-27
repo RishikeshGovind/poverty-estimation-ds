@@ -26,16 +26,23 @@ export function useModelPredictions() {
         const clusterFeatures: PovertyFeature[] = (data.features ?? []).map(
           (f: {
             geometry: { coordinates: [number, number] };
-            properties: { country: string; wealth_index: number; composite_score: number };
+            properties: {
+              country: string; wealth_index: number; composite_score: number;
+              adm1_name?: string; region_name?: string; urban_rural?: string;
+            };
           }) => {
             const [lon, lat] = f.geometry.coordinates;
             const wi = f.properties.wealth_index ?? 0;
             const poverty_rate = Math.max(0, Math.min(100, 50 - wi * 25));
+            const adm1  = f.properties.adm1_name  ?? "";
+            const urban = f.properties.urban_rural ?? "";
+            // Encode place info into iso3 — decoded by RegionPopup
+            const placeKey = `CLUSTER|${adm1}|${urban}`;
             return {
               country: f.properties.country,
-              iso3: `${f.properties.country}_${lon.toFixed(4)}_${lat.toFixed(4)}`,
+              iso3: placeKey,
               lat, lon, poverty_rate,
-              hdi: (wi + 2) / 4,   // normalise [-2,+2] → [0,1] for popup display
+              hdi: (wi + 2) / 4,
               year: 2023,
               ntl_trend: makeFlatTrend(Math.max(0, wi / 4 + 0.25)),
               ndvi_trend: makeFlatTrend(0.5),

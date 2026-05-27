@@ -21,10 +21,15 @@ logger = get_logger(__name__)
 
 
 def _load_one_country(name: str, gps_path: str, hr_path: str, wealth_scale: float) -> pd.DataFrame:
+    extra_cols = ["ADM1NAME", "DHSREGNA", "URBAN_RURA"]
     if gps_path.endswith((".shp", ".dbf", ".gpkg")):
-        gps_df = gpd.read_file(gps_path)[["DHSCLUST", "LATNUM", "LONGNUM"]]
+        all_cols = ["DHSCLUST", "LATNUM", "LONGNUM"] + extra_cols
+        avail = [c for c in all_cols if c in gpd.read_file(gps_path, rows=1).columns]
+        gps_df = gpd.read_file(gps_path)[avail]
     else:
-        gps_df = pd.read_csv(gps_path)[["DHSCLUST", "LATNUM", "LONGNUM"]]
+        all_cols = ["DHSCLUST", "LATNUM", "LONGNUM"] + extra_cols
+        raw = pd.read_csv(gps_path)
+        gps_df = raw[[c for c in all_cols if c in raw.columns]]
 
     # Drop dummy coordinates (DHS displaces urban clusters — 0,0 = missing)
     gps_df = gps_df[(gps_df["LATNUM"] != 0) | (gps_df["LONGNUM"] != 0)]
@@ -52,7 +57,11 @@ def _load_one_country(name: str, gps_path: str, hr_path: str, wealth_scale: floa
                 name, len(merged), match_rate,
                 merged["wealth_index"].min(), merged["wealth_index"].max())
 
-    return merged[["country", "longitude", "latitude", "wealth_index"]]
+    out_cols = ["country", "longitude", "latitude", "wealth_index"]
+    for col in ["ADM1NAME", "DHSREGNA", "URBAN_RURA"]:
+        if col in merged.columns:
+            out_cols.append(col)
+    return merged[out_cols]
 
 
 def _generate_synthetic(bbox: list, n: int = 50) -> pd.DataFrame:

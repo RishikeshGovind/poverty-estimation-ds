@@ -56,9 +56,10 @@ def main():
 
     combined = pd.concat(frames, ignore_index=True)
 
-    cols = ["longitude","latitude","wealth_index","country","label",
-            "s2_patch_file","s1_patch_file","viirs_patch_file","patch_file"]
-    combined[cols].to_csv(args.out, index=False)
+    base_cols = ["longitude","latitude","wealth_index","country","label",
+                 "s2_patch_file","s1_patch_file","viirs_patch_file","patch_file"]
+    extra_cols = [c for c in ["ADM1NAME","DHSREGNA","URBAN_RURA"] if c in combined.columns]
+    combined[base_cols + extra_cols].to_csv(args.out, index=False)
 
     print(f"\nWrote {len(combined)} rows to {args.out}")
     print(combined.groupby("country")["wealth_index"].describe().round(3))

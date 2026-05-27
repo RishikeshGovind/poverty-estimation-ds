@@ -87,9 +87,15 @@ def main():
         else:
             scores = scorer.score_row(row.to_dict())
 
+        adm1 = str(row.get("ADM1NAME", "")) or None
+        region = str(row.get("DHSREGNA", "")) or None
+        urban = str(row.get("URBAN_RURA", "")) or None
         props = {
             "wealth_index":    round(float(row.get("prediction", row.get("label", 0))), 3),
             "country":         str(row.get("country", "Unknown")),
+            "adm1_name":       adm1,
+            "region_name":     region,
+            "urban_rural":     "Urban" if urban == "U" else "Rural" if urban == "R" else None,
             "uncertainty":     round(float(row["uncertainty"]), 3) if "uncertainty" in row and not np.isnan(float(row.get("uncertainty", float("nan")))) else None,
             **scores,
         }
