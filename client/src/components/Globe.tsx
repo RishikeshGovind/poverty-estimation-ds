@@ -1,19 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { Viewer, Entity, PointGraphics, ImageryLayer } from "resium";
 import * as Cesium from "cesium";
 import { useGlobeStore } from "../store/globeStore";
 import type { PovertyFeature } from "../store/globeStore";
 
-// Poverty rate → choropleth colour (red = high poverty, yellow-green = low)
 function povertyColor(rate: number | null, opacity: number): Cesium.Color {
   const r = rate ?? 50;
-  const t = Math.min(r / 80, 1); // 0 (low) → 1 (high poverty)
-  return new Cesium.Color(
-    0.6 + 0.4 * t,           // R: 0.6–1.0
-    0.6 * (1 - t),           // G: 0.6–0
-    0.1,
-    opacity
-  );
+  const t = Math.min(r / 80, 1);
+  return new Cesium.Color(0.6 + 0.4 * t, 0.6 * (1 - t), 0.1, opacity);
 }
 
 function conflictColor(fatalities: number): Cesium.Color {
@@ -28,9 +22,50 @@ interface Props {
 
 export default function Globe({ onCountryClick }: Props) {
   const viewerRef = useRef<Cesium.Viewer | null>(null);
-  const {
-    layers, povertyFeatures, conflictEvents, flyTo, setFlyTo,
-  } = useGlobeStore();
+  // Stable DOM node for Cesium's credit container — never recreated
+  const creditContainerRef = useRef<HTMLDivElement>(document.createElement("div"));
+
+  const { layers, povertyFeatures, conflictEvents, flyTo, setFlyTo } = useGlobeStore();
+
+  // All providers created once and memoized — never recreated on re-render
+  const basemapProvider = useMemo(
+    () =>
+      new Cesium.UrlTemplateImageryProvider({
+        url: "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+        credit: "CartoDB",
+      }),
+    []
+  );
+
+  const nightlightsProvider = useMemo(
+    () =>
+      new Cesium.WebMapTileServiceImageryProvider({
+        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_Black_Marble_Annual_2023/default/2023-01-01/500m/{TileMatrixSet}/{TileRow}/{TileCol}.jpg",
+        layer: "VIIRS_Black_Marble_Annual_2023",
+        style: "default",
+        format: "image/jpeg",
+        tileMatrixSetID: "500m",
+        maximumLevel: 8,
+        tilingScheme: new Cesium.GeographicTilingScheme(),
+        credit: "NASA GSFC / GIBS",
+      }),
+    []
+  );
+
+  const ndviProvider = useMemo(
+    () =>
+      new Cesium.WebMapTileServiceImageryProvider({
+        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_NDVI_8Day/default/2023-01-01/250m/{TileMatrixSet}/{TileRow}/{TileCol}.png",
+        layer: "MODIS_Terra_NDVI_8Day",
+        style: "default",
+        format: "image/png",
+        tileMatrixSetID: "250m",
+        maximumLevel: 8,
+        tilingScheme: new Cesium.GeographicTilingScheme(),
+        credit: "NASA GSFC / GIBS",
+      }),
+    []
+  );
 
   // Fly-to effect
   useEffect(() => {
@@ -43,36 +78,10 @@ export default function Globe({ onCountryClick }: Props) {
     setFlyTo(null);
   }, [flyTo, setFlyTo]);
 
-  // NASA GIBS MODIS NTL tile provider (2016-onward monthly composites)
-  const nightlightsProvider = new Cesium.WebMapTileServiceImageryProvider({
-    url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_Black_Marble_Annual_2023/default/2023-01-01/500m/{TileMatrixSet}/{TileRow}/{TileCol}.jpg",
-    layer: "VIIRS_Black_Marble_Annual_2023",
-    style: "default",
-    format: "image/jpeg",
-    tileMatrixSetID: "500m",
-    maximumLevel: 8,
-    tilingScheme: new Cesium.GeographicTilingScheme(),
-    credit: "NASA GSFC / GIBS",
-  });
-
-  // NASA GIBS NDVI MODIS
-  const ndviProvider = new Cesium.WebMapTileServiceImageryProvider({
-    url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_NDVI_8Day/default/2023-01-01/250m/{TileMatrixSet}/{TileRow}/{TileCol}.png",
-    layer: "MODIS_Terra_NDVI_8Day",
-    style: "default",
-    format: "image/png",
-    tileMatrixSetID: "250m",
-    maximumLevel: 8,
-    tilingScheme: new Cesium.GeographicTilingScheme(),
-    credit: "NASA GSFC / GIBS",
-  });
-
   return (
     <Viewer
       full
-      ref={(v) => {
-        if (v?.cesiumElement) viewerRef.current = v.cesiumElement;
-      }}
+      ref={(v) => { if (v?.cesiumElement) viewerRef.current = v.cesiumElement; }}
       timeline={false}
       animation={false}
       baseLayerPicker={false}
@@ -82,38 +91,19 @@ export default function Globe({ onCountryClick }: Props) {
       navigationHelpButton={false}
       infoBox={false}
       selectionIndicator={false}
-      creditContainer={document.createElement("div")} // hide credit overlay
-      terrainProvider={new Cesium.EllipsoidTerrainProvider()}
+      creditContainer={creditContainerRef.current}
       scene3DOnly
-      requestRenderMode={false}
     >
-      {/* Dark base map */}
-      <ImageryLayer
-        imageryProvider={
-          new Cesium.UrlTemplateImageryProvider({
-            url: "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-            credit: "CartoDB",
-          })
-        }
-      />
+      <ImageryLayer imageryProvider={basemapProvider} />
 
-      {/* Nighttime lights layer */}
       {layers.nightlights.enabled && (
-        <ImageryLayer
-          imageryProvider={nightlightsProvider}
-          alpha={layers.nightlights.opacity}
-        />
+        <ImageryLayer imageryProvider={nightlightsProvider} alpha={layers.nightlights.opacity} />
       )}
 
-      {/* NDVI layer */}
       {layers.ndvi.enabled && (
-        <ImageryLayer
-          imageryProvider={ndviProvider}
-          alpha={layers.ndvi.opacity}
-        />
+        <ImageryLayer imageryProvider={ndviProvider} alpha={layers.ndvi.opacity} />
       )}
 
-      {/* Poverty choropleth dots */}
       {layers.poverty.enabled &&
         povertyFeatures.map((f) => (
           <Entity
@@ -131,7 +121,6 @@ export default function Globe({ onCountryClick }: Props) {
           </Entity>
         ))}
 
-      {/* Conflict events */}
       {layers.conflict.enabled &&
         conflictEvents.map((ev) => (
           <Entity
