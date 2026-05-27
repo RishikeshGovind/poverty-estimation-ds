@@ -71,9 +71,21 @@ def main():
     df = _load_predictions(cfg)
     scorer = SDGScorer()
 
+    # Normalise wealth column: predictions.csv uses 'wealth_index'; fallback to 'prediction'/'label'
+    if "prediction" not in df.columns:
+        df["prediction"] = df.get("wealth_index", df.get("label", 0))
+
+    _SCORE_COLS = ["sdg1_score", "sdg7_score", "sdg11_score", "composite_score"]
+    has_precomputed = all(c in df.columns for c in _SCORE_COLS)
+
     features = []
     for _, row in df.iterrows():
-        scores = scorer.score_row(row.to_dict())
+        # Use pre-computed scores when available (avoids re-scoring with missing columns)
+        if has_precomputed:
+            scores = {c: (round(float(row[c]), 1) if not _isnan(row[c]) else None)
+                      for c in _SCORE_COLS}
+        else:
+            scores = scorer.score_row(row.to_dict())
 
         props = {
             "wealth_index":    round(float(row.get("prediction", row.get("label", 0))), 3),
