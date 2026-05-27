@@ -4,6 +4,9 @@ import * as Cesium from "cesium";
 import { useGlobeStore } from "../store/globeStore";
 import type { PovertyFeature } from "../store/globeStore";
 
+// Set token here so it's only evaluated when Globe is actually loaded
+Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN ?? "";
+
 function povertyColor(rate: number | null, opacity: number): Cesium.Color {
   const r = rate ?? 50;
   const t = Math.min(r / 80, 1);

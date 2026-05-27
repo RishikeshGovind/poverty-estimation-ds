@@ -1,6 +1,5 @@
 import "./index.css";
-import { Ion } from "cesium";
-import Globe from "./components/Globe";
+import { lazy, Suspense } from "react";
 import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
 import Timeline from "./components/Timeline";
@@ -12,8 +11,8 @@ import { useGlobeStore } from "./store/globeStore";
 import { useWorldBank } from "./hooks/useWorldBank";
 import { useACLED } from "./hooks/useACLED";
 
-// Set Cesium Ion token from env
-Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN ?? "";
+// Lazy-load Globe so a Cesium init error doesn't prevent the rest of the app from rendering
+const Globe = lazy(() => import("./components/Globe"));
 
 function DataLoader() {
   const year = useGlobeStore((s) => s.year);
@@ -29,13 +28,13 @@ export default function App() {
     <div className="w-screen h-screen overflow-hidden bg-black">
       <DataLoader />
 
-      {/* 3D Globe — fills entire screen */}
+      {/* 3D Globe — lazy loaded so a Cesium error never kills the rest of the UI */}
       <ErrorBoundary fallback={
-        <div className="fixed inset-0 bg-black flex items-center justify-center">
-          <p className="text-slate-500 text-xs font-mono">Globe failed to load — check console</p>
-        </div>
+        <div className="fixed inset-0 bg-[#0b0e1a]" />
       }>
-        <Globe onCountryClick={setSelected} />
+        <Suspense fallback={<div className="fixed inset-0 bg-[#0b0e1a]" />}>
+          <Globe onCountryClick={setSelected} />
+        </Suspense>
       </ErrorBoundary>
 
       {/* UI chrome on top */}
