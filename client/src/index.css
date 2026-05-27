@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  background: #000;
+  color: #e2e8f0;
+  overflow: hidden;
+}
+
+/* CesiumJS canvas full screen */
+#cesium-container { width: 100vw; height: 100vh; position: fixed; inset: 0; }
+.cesium-widget,
+.cesium-widget canvas { width: 100% !important; height: 100% !important; }
+
+/* IBM Plex Mono for data values */
+.font-mono { font-family: "IBM Plex Mono", monospace; }
+
+/* Glass panel */
+.glass {
+  background: rgba(10, 10, 20, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+}
+
+/* Cyan glow on focus / active */
+.cyan-glow { box-shadow: 0 0 12px rgba(0, 255, 255, 0.35); }
+
+/* Layer toggle item */
+.layer-row { transition: background 0.15s; }
+.layer-row:hover { background: rgba(0, 255, 255, 0.07); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0, 255, 255, 0.3); border-radius: 2px; }
+
+/* Timeline range input */
+input[type="range"] { accent-color: #00FFFF; }
+
+/* Pulse animation for conflict dots */
+@keyframes pulse-ring {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+.conflict-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.6);
+  animation: pulse-ring 1.4s ease-out infinite;
+}

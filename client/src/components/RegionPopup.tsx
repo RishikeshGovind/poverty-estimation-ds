@@ -1,0 +1,107 @@
+import { X, TrendingUp, TrendingDown, ExternalLink } from "lucide-react";
+import {
+  LineChart, Line, ResponsiveContainer, Tooltip, YAxis,
+} from "recharts";
+import { useGlobeStore } from "../store/globeStore";
+import type { PovertyFeature } from "../store/globeStore";
+
+function Sparkline({ data, color }: { data: number[]; color: string }) {
+  const chartData = data.map((v, i) => ({ i, v }));
+  return (
+    <ResponsiveContainer width="100%" height={40}>
+      <LineChart data={chartData} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+        <YAxis domain={["auto", "auto"]} hide />
+        <Tooltip
+          contentStyle={{ background: "#0a0a14", border: "1px solid #00FFFF33", fontSize: 10 }}
+          labelFormatter={(i) => `${2014 + (i as number)}`}
+          formatter={(v) => [typeof v === "number" ? v.toFixed(3) : v, ""]}
+        />
+        <Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} dot={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+interface Props {
+  feature: PovertyFeature;
+}
+
+export default function RegionPopup({ feature: f }: Props) {
+  const setSelected = useGlobeStore((s) => s.setSelected);
+  const pTrend = f.ntl_trend.length >= 2
+    ? f.ntl_trend[f.ntl_trend.length - 1] - f.ntl_trend[0]
+    : 0;
+
+  return (
+    <div className="glass fixed right-72 bottom-14 w-72 z-30 rounded-lg overflow-hidden shadow-2xl">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-500/20">
+        <div>
+          <h3 className="text-sm font-semibold text-white">{f.country}</h3>
+          <span className="text-[10px] text-slate-500 font-mono">{f.iso3} · {f.year}</span>
+        </div>
+        <button onClick={() => setSelected(null)} className="text-slate-500 hover:text-white">
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Key metrics */}
+      <div className="px-4 py-3 grid grid-cols-2 gap-3">
+        <div className="bg-white/5 rounded p-2">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Poverty Rate</p>
+          <p className="text-lg font-bold font-mono" style={{
+            color: (f.poverty_rate ?? 50) > 50 ? "#EF4444" : "#F59E0B",
+          }}>
+            {f.poverty_rate != null ? `${f.poverty_rate.toFixed(1)}%` : "N/A"}
+          </p>
+        </div>
+        <div className="bg-white/5 rounded p-2">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider">HDI Proxy</p>
+          <p className="text-lg font-bold font-mono text-cyan-400">
+            {f.hdi != null ? f.hdi.toFixed(2) : "N/A"}
+          </p>
+        </div>
+      </div>
+
+      {/* Nighttime light trend */}
+      <div className="px-4 pb-2">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wider">NTL Trend</p>
+          <span className={`flex items-center gap-0.5 text-[10px] font-mono ${
+            pTrend >= 0 ? "text-green-400" : "text-red-400"
+          }`}>
+            {pTrend >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+            {(pTrend * 100).toFixed(1)}%
+          </span>
+        </div>
+        <Sparkline data={f.ntl_trend} color="#FBBF24" />
+      </div>
+
+      {/* NDVI trend */}
+      <div className="px-4 pb-3">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">NDVI Trend</p>
+        <Sparkline data={f.ndvi_trend} color="#22C55E" />
+      </div>
+
+      {/* Actions */}
+      <div className="px-4 pb-3 flex gap-2">
+        <a
+          href={`https://data.worldbank.org/country/${f.iso3.toLowerCase()}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 rounded px-3 py-1.5"
+        >
+          <ExternalLink size={10} /> World Bank
+        </a>
+        <a
+          href={`https://hdr.undp.org/data-center/specific-country-data#/countries/${f.iso3}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 border border-cyan-500/30 rounded px-3 py-1.5"
+        >
+          <ExternalLink size={10} /> UNDP HDR
+        </a>
+      </div>
+    </div>
+  );
+}

@@ -29,6 +29,10 @@ jupyter
 fastapi
 uvicorn[standard]
 python-multipart
+httpx
+
+# AI (Gemini free tier)
+google-genai
 
 # Config
 pyyaml
