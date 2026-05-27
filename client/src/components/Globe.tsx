@@ -25,6 +25,7 @@ interface Props {
 
 export default function Globe({ onCountryClick }: Props) {
   const viewerRef = useRef<Cesium.Viewer | null>(null);
+  const initDone = useRef(false);
   // Stable DOM node for Cesium's credit container — never recreated
   const creditContainerRef = useRef<HTMLDivElement>(document.createElement("div"));
 
@@ -84,7 +85,21 @@ export default function Globe({ onCountryClick }: Props) {
   return (
     <Viewer
       full
-      ref={(v) => { if (v?.cesiumElement) viewerRef.current = v.cesiumElement; }}
+      ref={(v) => {
+        if (v?.cesiumElement && !initDone.current) {
+          viewerRef.current = v.cesiumElement;
+          const viewer = v.cesiumElement;
+          initDone.current = true;
+          // Remove default Bing/Ion layer; we supply our own CartoDB tiles
+          while (viewer.imageryLayers.length > 0) {
+            viewer.imageryLayers.remove(viewer.imageryLayers.get(0), false);
+          }
+          viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0b0e1a");
+          viewer.camera.setView({
+            destination: Cesium.Cartesian3.fromDegrees(20, 5, 12_000_000),
+          });
+        }
+      }}
       timeline={false}
       animation={false}
       baseLayerPicker={false}
