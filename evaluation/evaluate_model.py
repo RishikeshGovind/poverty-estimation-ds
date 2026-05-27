@@ -25,23 +25,24 @@ elif torch.backends.mps.is_available():
 else:
     device = torch.device("cpu")
 
-val_dataset = PovertyDataset(train=False)
-val_loader = DataLoader(val_dataset, batch_size=batch_size)
+full_dataset = PovertyDataset(train=True, split=1.0)   # all rows for GeoJSON
+full_loader = DataLoader(full_dataset, batch_size=batch_size)
 
-model = ResNetRegression(in_channels=3).to(device)
+dropout_p = cfg.get("model", {}).get("dropout_p", 0.0)
+model = ResNetRegression(in_channels=3, dropout_p=dropout_p).to(device)
 model.load_state_dict(torch.load(checkpoint_path, map_location=device))
 model.eval()
 logger.info("Loaded model from %s", checkpoint_path)
 
 all_preds, all_labels = [], []
 with torch.no_grad():
-    for images, labels in val_loader:
+    for images, labels in full_loader:
         images = images.to(device)
         preds = model(images).cpu().numpy()
         all_preds.extend(preds)
-        all_labels.extend(labels.numpy())  # labels never moved to device, always on CPU
+        all_labels.extend(labels.numpy())
 
-df_results = val_dataset.data.copy()
+df_results = full_dataset.data.copy()
 df_results["prediction"] = all_preds
 os.makedirs(os.path.dirname(predictions_csv), exist_ok=True)
 df_results.to_csv(predictions_csv, index=False)
