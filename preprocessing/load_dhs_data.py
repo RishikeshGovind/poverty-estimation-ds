@@ -1,25 +1,18 @@
 """
-DHS data loader.
+DHS data loader — multi-country.
 
-Real data:
-  Register at https://dhsprogram.com/data/dataset_admin/login_main.cfm (free).
-  Request the GPS dataset (.zip containing a shapefile) and the Household Recode (.DTA).
-  Set dhs.gps_path and dhs.hr_path in config.yaml.
+Reads GPS shapefiles (DHSCLUST, LATNUM, LONGNUM) and Household Recode .DTA files
+(hv001 cluster ID, hv271 wealth factor score × 100000) for each country defined
+in config.yaml under dhs.countries, merges them, and writes a combined CSV to
+data.survey_path.
 
-  GPS file columns used : DHSCLUST, LATNUM, LONGNUM
-  Household recode cols : hv001 (cluster ID), hv271 (wealth factor score × 100000)
-
-Synthetic fallback:
-  If dhs.gps_path is empty the script generates 50 synthetic points over the
-  sentinel2.bbox region so the rest of the pipeline can run immediately.
+Falls back to 50 synthetic points if no countries are configured.
 """
 
+import os
 import pandas as pd
 import geopandas as gpd
-import folium
-from shapely.geometry import Point
 import numpy as np
-import os
 
 from utils.config import load_config
 from utils.logging import get_logger
@@ -27,32 +20,20 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-def _load_real_dhs(gps_path: str, hr_path: str, wealth_scale: float) -> pd.DataFrame:
-    """Merge DHS GPS clusters with household recode wealth index."""
-    # --- GPS clusters ---
+def _load_one_country(name: str, gps_path: str, hr_path: str, wealth_scale: float) -> pd.DataFrame:
     if gps_path.endswith((".shp", ".dbf", ".gpkg")):
         gps_df = gpd.read_file(gps_path)[["DHSCLUST", "LATNUM", "LONGNUM"]]
     else:
         gps_df = pd.read_csv(gps_path)[["DHSCLUST", "LATNUM", "LONGNUM"]]
 
-    missing = {"DHSCLUST", "LATNUM", "LONGNUM"} - set(gps_df.columns)
-    if missing:
-        raise ValueError(f"GPS file missing columns: {missing}")
-
-    # Filter out dummy/missing coordinates (DHS uses 0,0 for urban displacement)
+    # Drop dummy coordinates (DHS displaces urban clusters — 0,0 = missing)
     gps_df = gps_df[(gps_df["LATNUM"] != 0) | (gps_df["LONGNUM"] != 0)]
 
-    # --- Household recode ---
-    if hr_path.endswith(".dta"):
-        hr_df = pd.read_stata(hr_path, columns=["hv001", "hv271"])
+    if hr_path.endswith(".dta") or hr_path.endswith(".DTA"):
+        hr_df = pd.read_stata(hr_path, columns=["hv001", "hv271"], convert_categoricals=False)
     else:
         hr_df = pd.read_csv(hr_path)[["hv001", "hv271"]]
 
-    missing_hr = {"hv001", "hv271"} - set(hr_df.columns)
-    if missing_hr:
-        raise ValueError(f"Household recode missing columns: {missing_hr}")
-
-    # hv271 is stored as score * 100000 — rescale to roughly [-2, +2]
     hr_df["wealth_index"] = hr_df["hv271"] / wealth_scale
 
     cluster_wealth = (
@@ -64,72 +45,62 @@ def _load_real_dhs(gps_path: str, hr_path: str, wealth_scale: float) -> pd.DataF
 
     merged = gps_df.merge(cluster_wealth, on="DHSCLUST", how="inner")
     merged = merged.rename(columns={"LONGNUM": "longitude", "LATNUM": "latitude"})
-    logger.info(
-        "Merged %d GPS clusters with household recode (%.0f%% match rate)",
-        len(merged),
-        100 * len(merged) / max(len(gps_df), 1),
-    )
-    return merged[["longitude", "latitude", "wealth_index"]]
+    merged["country"] = name
+
+    match_rate = 100 * len(merged) / max(len(gps_df), 1)
+    logger.info("%s: %d clusters (%.0f%% GPS match) | wealth [%.3f, %.3f]",
+                name, len(merged), match_rate,
+                merged["wealth_index"].min(), merged["wealth_index"].max())
+
+    return merged[["country", "longitude", "latitude", "wealth_index"]]
 
 
 def _generate_synthetic(bbox: list, n: int = 50) -> pd.DataFrame:
     np.random.seed(42)
     return pd.DataFrame({
+        "country": "synthetic",
         "longitude": np.random.uniform(bbox[0], bbox[2], n),
-        "latitude": np.random.uniform(bbox[1], bbox[3], n),
+        "latitude":  np.random.uniform(bbox[1], bbox[3], n),
         "wealth_index": np.random.uniform(-2, 2, n),
     })
 
 
 def main():
     cfg = load_config()
-    data_path = cfg["data"]["survey_path"]
+    out_path = cfg["data"]["survey_path"]
     bbox = cfg["sentinel2"]["bbox"]
-    dhs_cfg = cfg["dhs"]
-    os.makedirs("data", exist_ok=True)
-    os.makedirs("outputs/maps", exist_ok=True)
-
-    gps_path = dhs_cfg.get("gps_path", "")
-    hr_path = dhs_cfg.get("hr_path", "")
+    dhs_cfg = cfg.get("dhs", {})
     wealth_scale = dhs_cfg.get("wealth_scale_factor", 100000)
+    countries = dhs_cfg.get("countries", {})
 
-    if gps_path and hr_path:
-        if not os.path.exists(gps_path):
-            raise FileNotFoundError(f"DHS GPS file not found: {gps_path}")
-        if not os.path.exists(hr_path):
-            raise FileNotFoundError(f"DHS household recode not found: {hr_path}")
-        logger.info("Loading real DHS data from %s + %s", gps_path, hr_path)
-        df = _load_real_dhs(gps_path, hr_path, wealth_scale)
-    else:
-        logger.warning(
-            "dhs.gps_path / dhs.hr_path not set in config.yaml. "
-            "Generating synthetic data. Register at dhsprogram.com for real data."
-        )
+    os.makedirs("data", exist_ok=True)
+
+    if not countries:
+        logger.warning("No dhs.countries configured — using synthetic data.")
         df = _generate_synthetic(bbox)
+    else:
+        frames = []
+        for name, paths in countries.items():
+            gps_path = paths.get("gps_path", "")
+            hr_path  = paths.get("hr_path", "")
+            if not gps_path or not hr_path:
+                logger.warning("Skipping %s — paths not set.", name)
+                continue
+            if not os.path.exists(gps_path):
+                raise FileNotFoundError(f"GPS file not found: {gps_path}")
+            if not os.path.exists(hr_path):
+                raise FileNotFoundError(f"HR file not found: {hr_path}")
+            frames.append(_load_one_country(name, gps_path, hr_path, wealth_scale))
 
-    df.to_csv(data_path, index=False)
-    logger.info("Survey data written to %s (%d points)", data_path, len(df))
+        if not frames:
+            logger.warning("All countries skipped — falling back to synthetic data.")
+            df = _generate_synthetic(bbox)
+        else:
+            df = pd.concat(frames, ignore_index=True)
 
-    geometry = [Point(xy) for xy in zip(df["longitude"], df["latitude"])]
-    gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")
-    logger.info(
-        "Wealth index | min=%.3f  max=%.3f  mean=%.3f",
-        df["wealth_index"].min(), df["wealth_index"].max(), df["wealth_index"].mean(),
-    )
-
-    center = [gdf["latitude"].mean(), gdf["longitude"].mean()]
-    m = folium.Map(location=center, zoom_start=12)
-    for _, row in gdf.iterrows():
-        color = "green" if row["wealth_index"] > 0 else "red"
-        folium.CircleMarker(
-            location=[row["latitude"], row["longitude"]],
-            radius=5, color=color, fill=True, fill_opacity=0.7,
-            popup=f"Wealth Index: {row['wealth_index']:.2f}",
-        ).add_to(m)
-
-    output_map = "outputs/maps/dhs_survey_map.html"
-    m.save(output_map)
-    logger.info("Interactive map saved to %s", output_map)
+    df.to_csv(out_path, index=False)
+    logger.info("Wrote %d clusters to %s", len(df), out_path)
+    logger.info("Countries: %s", df["country"].value_counts().to_dict())
 
 
 if __name__ == "__main__":

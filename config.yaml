@@ -12,7 +12,7 @@ sentinel2:
   bbox: [36.7, -1.35, 36.9, -1.15]
   date_range: "2023-01-01/2023-12-31"
   max_cloud_cover: 10
-  normalization_factor: 10000
+  normalization_factor: 1  # patches already normalised to [0,1] by download_s2_patches.py
 
 sentinel1:
   bbox: [36.7, -1.35, 36.9, -1.15]
@@ -31,13 +31,14 @@ viirs:
   normalization_clip: 200.0
 
 dhs:
-  # Leave blank to use synthetic data. Set these after registering at dhsprogram.com.
-  # GPS cluster file: CSV/shapefile with DHSCLUST, LATNUM, LONGNUM columns
-  gps_path: ""
-  # Household recode: Stata .DTA file with hv001 (cluster ID) and hv271 (wealth score)
-  hr_path: ""
-  # hv271 is stored as score * 100000 in DHS files
   wealth_scale_factor: 100000
+  countries:
+    Kenya:
+      gps_path: "data/dhs/kenya/KEGE8AFL/KEGE8AFL.shp"
+      hr_path:  "data/dhs/kenya/KEHR8CDT/KEHR8CFL.DTA"
+    Nigeria:
+      gps_path: "data/dhs/nigeria/NGGE8AFL/NGGE8AFL.shp"
+      hr_path:  "data/dhs/nigeria/NGHR8BDT/NGHR8BFL.dta"
 
 training:
   batch_size: 16

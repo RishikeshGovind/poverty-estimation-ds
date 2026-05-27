@@ -68,10 +68,14 @@ def run_training(sensors, run_name, epochs=None, csv_path=None, checkpoint_dir=N
     # --- Stage 2: load pretrained backbone if available ---
     pretrained_ckpt = cfg.get("pretrain_ntl", {}).get("checkpoint")
     if pretrained_ckpt and os.path.exists(pretrained_ckpt) and "s2" in sensors:
-        model.backbone.load_state_dict(
-            torch.load(pretrained_ckpt, map_location="cpu"), strict=False
-        )
-        logger.info("Loaded NTL-pretrained backbone from %s", pretrained_ckpt)
+        pretrained_sd = torch.load(pretrained_ckpt, map_location="cpu")
+        model_sd = model.backbone.state_dict()
+        # Skip layers where shapes differ (e.g. conv1 when n_channels > 3)
+        compatible = {k: v for k, v in pretrained_sd.items()
+                      if k in model_sd and v.shape == model_sd[k].shape}
+        model.backbone.load_state_dict(compatible, strict=False)
+        logger.info("Loaded NTL-pretrained backbone from %s (%d/%d layers)",
+                    pretrained_ckpt, len(compatible), len(pretrained_sd))
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=3)
