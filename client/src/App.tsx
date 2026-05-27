@@ -10,6 +10,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useGlobeStore } from "./store/globeStore";
 import { useWorldBank } from "./hooks/useWorldBank";
 import { useACLED } from "./hooks/useACLED";
+import { useModelPredictions } from "./hooks/useModelPredictions";
 
 // Lazy-load Globe so a Cesium init error doesn't prevent the rest of the app from rendering
 const Globe = lazy(() => import("./components/Globe"));
@@ -18,6 +19,7 @@ function DataLoader() {
   const year = useGlobeStore((s) => s.year);
   useWorldBank(year);
   useACLED(year);
+  useModelPredictions(); // overwrites World Bank with real model predictions when available
   return null;
 }
 

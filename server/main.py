@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from server.routes import worldbank, acled, ai_query
+from server.routes import worldbank, acled, ai_query, predictions
 
 app = FastAPI(title="AfricaLens API", version="1.0.0")
 
@@ -20,9 +20,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(worldbank.router, prefix="/api")
-app.include_router(acled.router,     prefix="/api")
-app.include_router(ai_query.router,  prefix="/api")
+app.include_router(worldbank.router,    prefix="/api")
+app.include_router(acled.router,        prefix="/api")
+app.include_router(ai_query.router,     prefix="/api")
+app.include_router(predictions.router,  prefix="/api")
 
 
 @app.get("/api/health")
