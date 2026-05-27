@@ -35,7 +35,7 @@ export function useModelPredictions() {
               country: f.properties.country,
               iso3: `${f.properties.country}_${lon.toFixed(4)}_${lat.toFixed(4)}`,
               lat, lon, poverty_rate,
-              hdi: f.properties.composite_score != null ? f.properties.composite_score / 100 : null,
+              hdi: (wi + 2) / 4,   // normalise [-2,+2] → [0,1] for popup display
               year: 2023,
               ntl_trend: makeFlatTrend(Math.max(0, wi / 4 + 0.25)),
               ndvi_trend: makeFlatTrend(0.5),
