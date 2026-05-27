@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useGlobeStore } from "../store/globeStore";
 import type { PovertyFeature } from "../store/globeStore";
-import { apiUrl } from "../lib/api";
 
 function makeFlatTrend(v: number): number[] {
   return Array(10).fill(parseFloat(v.toFixed(3)));
@@ -19,7 +18,8 @@ export function useModelPredictions() {
       await new Promise((r) => setTimeout(r, 1500));
       if (cancelled) return;
       try {
-        const res = await fetch(apiUrl("/api/predictions"));
+        // Served as static asset from /public — no Render dependency
+        const res = await fetch("/predictions.geojson");
         if (!res.ok || cancelled) return;
         const data = await res.json();
 
