@@ -271,10 +271,9 @@ export default function Globe({ onCountryClick }: Props) {
         const col = new Cesium.PointPrimitiveCollection();
         state.povertyFeatures.forEach((f) => {
           col.add({
-            position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat),
+            position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 20000),
             color: povertyColor(f.poverty_rate, state.layers.poverty.opacity),
             pixelSize: 5,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
             scaleByDistance: new Cesium.NearFarScalar(8e5, 1.8, 8e6, 0.4),
             id: f,
           });
@@ -291,10 +290,9 @@ export default function Globe({ onCountryClick }: Props) {
         const col = new Cesium.PointPrimitiveCollection();
         state.conflictEvents.forEach((ev) => {
           col.add({
-            position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat),
+            position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat, 20000),
             color: conflictColor(ev.fatalities).withAlpha(state.layers.conflict.opacity),
             pixelSize: 9,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
             scaleByDistance: new Cesium.NearFarScalar(1e6, 1.8, 8e6, 0.6),
           });
         });
@@ -374,7 +372,6 @@ export default function Globe({ onCountryClick }: Props) {
           color: Cesium.Color.WHITE,
           outlineColor: Cesium.Color.CYAN,
           outlineWidth: 2,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
         path: {
           resolution: 60,
@@ -394,7 +391,6 @@ export default function Globe({ onCountryClick }: Props) {
           outlineWidth: 2,
           style: Cesium.LabelStyle.FILL_AND_OUTLINE,
           pixelOffset: new Cesium.Cartesian2(12, -4),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
           translucencyByDistance: new Cesium.NearFarScalar(1e6, 1.0, 8e6, 0.0),
         },
       });
