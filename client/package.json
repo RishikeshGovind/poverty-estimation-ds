@@ -19,7 +19,7 @@
     "react-dom": "^19.1.0",
     "recharts": "^3.8.1",
     "resium": "^1.17.2",
-    "satellite.js": "^7.0.1",
+    "satellite.js": "^4.1.4",
     "zustand": "^5.0.13"
   },
   "devDependencies": {
