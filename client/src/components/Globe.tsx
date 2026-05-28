@@ -304,76 +304,110 @@ export default function Globe({ onCountryClick }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Live satellite tracking ───────────────────────────────────────────────
+  // ── Live satellite tracking (Cesium clock-driven, smooth interpolation) ─────
   useEffect(() => {
     interface TLE { name: string; line1: string; line2: string }
-    let tles: TLE[] = [];
-    let satCol: Cesium.PointPrimitiveCollection | null = null;
-    let timerId: ReturnType<typeof setInterval>;
+    const satEntities: Cesium.Entity[] = [];
+    let cancelled = false;
 
-    function updatePositions() {
-      const viewer = viewerRef.current;
-      if (!viewer || tles.length === 0) return;
-
-      if (satCol) {
-        viewer.scene.primitives.remove(satCol);
-      }
-      satCol = new Cesium.PointPrimitiveCollection();
-      const now = new Date();
-
-      for (const tle of tles) {
-        try {
-          const satrec = satellite.twoline2satrec(tle.line1, tle.line2);
-          const pv = satellite.propagate(satrec, now);
-          if (!pv || !pv.position || typeof pv.position === "boolean") continue;
-          const gmst = satellite.gstime(now);
-          const geo = satellite.eciToGeodetic(pv.position as satellite.EciVec3<number>, gmst);
-          const lat = geo.latitude  * (180 / Math.PI);
-          const lon = geo.longitude * (180 / Math.PI);
-          const altM = geo.height * 1000;
-          satCol.add({
-            position: Cesium.Cartesian3.fromDegrees(lon, lat, altM),
-            color: Cesium.Color.CYAN.withAlpha(0.9),
-            pixelSize: 5,
-            outlineColor: Cesium.Color.WHITE.withAlpha(0.4),
-            outlineWidth: 1,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          });
-        } catch {
-          continue;
-        }
-      }
-      viewer.scene.primitives.add(satCol);
-    }
-
-    async function loadAndStart() {
+    async function loadAndRender() {
+      const tles: TLE[] = [];
       try {
-        // Earth-observation satellites (Sentinel, Landsat, VIIRS…) — free, CORS-enabled
         const res = await fetch(
           "https://celestrak.org/NOSTR/GP.php?GROUP=earth-observers&FORMAT=tle",
           { cache: "no-store" }
         );
-        if (!res.ok) return;
+        if (!res.ok || cancelled) return;
         const text = await res.text();
         const lines = text.trim().split("\n").map((l) => l.trim()).filter(Boolean);
         for (let i = 0; i + 2 < lines.length; i += 3) {
           tles.push({ name: lines[i], line1: lines[i + 1], line2: lines[i + 2] });
-          if (tles.length >= 30) break;
+          if (tles.length >= 25) break;
         }
-      } catch {
-        return; // silently skip if CelesTrak unreachable
+      } catch { return; }
+
+      if (cancelled) return;
+      const viewer = viewerRef.current;
+      if (!viewer) return;
+
+      // One full LEO orbit = 90 minutes; sample every 60 s → 91 position samples
+      const DURATION = 5400;
+      const STEP     = 60;
+      const startJD  = Cesium.JulianDate.fromDate(new Date());
+      const stopJD   = Cesium.JulianDate.addSeconds(startJD, DURATION, new Cesium.JulianDate());
+
+      // Drive Cesium's clock silently (no timeline UI) — 60 s of orbit per real second
+      viewer.clock.startTime    = startJD.clone();
+      viewer.clock.stopTime     = stopJD.clone();
+      viewer.clock.currentTime  = startJD.clone();
+      viewer.clock.clockRange   = Cesium.ClockRange.LOOP_STOP;
+      viewer.clock.multiplier   = 60;
+      viewer.clock.shouldAnimate = true;
+
+      for (const tle of tles) {
+        if (cancelled) break;
+        try {
+          const satrec = satellite.twoline2satrec(tle.line1, tle.line2);
+          const posProperty = new Cesium.SampledPositionProperty();
+          posProperty.setInterpolationOptions({
+            interpolationDegree: 5,
+            interpolationAlgorithm: Cesium.LagrangePolynomialApproximation,
+          });
+
+          for (let dt = 0; dt <= DURATION; dt += STEP) {
+            const jd     = Cesium.JulianDate.addSeconds(startJD, dt, new Cesium.JulianDate());
+            const jsDate = Cesium.JulianDate.toDate(jd);
+            const pv     = satellite.propagate(satrec, jsDate);
+            if (!pv || !pv.position || typeof pv.position === "boolean") continue;
+            const gmst = satellite.gstime(jsDate);
+            const geo  = satellite.eciToGeodetic(pv.position as satellite.EciVec3<number>, gmst);
+            posProperty.addSample(
+              jd,
+              Cesium.Cartesian3.fromDegrees(
+                geo.longitude * (180 / Math.PI),
+                geo.latitude  * (180 / Math.PI),
+                geo.height * 1000
+              )
+            );
+          }
+
+          const entity = viewer.entities.add({
+            availability: new Cesium.TimeIntervalCollection([
+              new Cesium.TimeInterval({ start: startJD, stop: stopJD }),
+            ]),
+            position: posProperty,
+            point: {
+              pixelSize: 5,
+              color: Cesium.Color.CYAN.withAlpha(0.9),
+              outlineColor: Cesium.Color.WHITE.withAlpha(0.35),
+              outlineWidth: 1,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+            path: {
+              resolution: 60,
+              // glowing cyan trail behind each satellite
+              material: new Cesium.PolylineGlowMaterialProperty({
+                glowPower: 0.15,
+                color: Cesium.Color.CYAN.withAlpha(0.5),
+              }),
+              width: 1.5,
+              leadTime: 0,
+              trailTime: 600, // show last 10 minutes of orbit as a trail
+            },
+          });
+          satEntities.push(entity);
+        } catch { continue; }
       }
-      updatePositions();
-      timerId = setInterval(updatePositions, 10_000); // refresh every 10 s
     }
 
-    loadAndStart();
+    loadAndRender();
 
     return () => {
-      clearInterval(timerId);
+      cancelled = true;
       const viewer = viewerRef.current;
-      if (satCol && viewer && !viewer.isDestroyed()) {
-        viewer.scene.primitives.remove(satCol);
+      if (viewer && !viewer.isDestroyed()) {
+        satEntities.forEach((e) => viewer.entities.remove(e));
+        viewer.clock.shouldAnimate = false;
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
