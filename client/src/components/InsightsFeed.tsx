@@ -111,14 +111,16 @@ export default function InsightsFeed() {
         <div className="px-4 py-3 border-t border-cyan-500/20 grid grid-cols-2 gap-2">
           <div className="bg-white/5 rounded p-2">
             <p className="text-[9px] text-slate-500 uppercase">Countries tracked</p>
-            <p className="text-sm font-mono font-bold text-cyan-400">{povertyFeatures.length}</p>
+            <p className="text-sm font-mono font-bold text-cyan-400">
+              {new Set(povertyFeatures.map((f) => f.country)).size}
+            </p>
           </div>
           <div className="bg-white/5 rounded p-2">
             <p className="text-[9px] text-slate-500 uppercase">Avg poverty</p>
             <p className="text-sm font-mono font-bold text-red-400">
               {(
-                povertyFeatures.reduce((s, f) => s + (f.poverty_rate ?? 0), 0) /
-                Math.max(povertyFeatures.length, 1)
+                sorted.reduce((s, f) => s + (f.poverty_rate ?? 0), 0) /
+                Math.max(sorted.length, 1)
               ).toFixed(1)}%
             </p>
           </div>
