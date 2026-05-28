@@ -28,6 +28,8 @@ export default function Globe({ onCountryClick }: Props) {
   const settlementsLayerRef = useRef<Cesium.ImageryLayer | null>(null);
   const infraLayerRef = useRef<Cesium.ImageryLayer | null>(null);
   const waterLayerRef = useRef<Cesium.ImageryLayer | null>(null);
+  const povertyPointsRef = useRef<Cesium.PointPrimitiveCollection | null>(null);
+  const conflictPointsRef = useRef<Cesium.PointPrimitiveCollection | null>(null);
 
   const layers = useGlobeStore((s) => s.layers);
   const flyTo = useGlobeStore((s) => s.flyTo);
@@ -76,15 +78,12 @@ export default function Globe({ onCountryClick }: Props) {
       destination: Cesium.Cartesian3.fromDegrees(20, 5, 12_000_000),
     });
 
-    // Click handler
+    // Click handler — works with PointPrimitive ids (stored directly as PovertyFeature)
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((e: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
       const picked = viewer.scene.pick(e.position);
-      if (Cesium.defined(picked) && picked.id?.properties?.featureData) {
-        const f = picked.id.properties.featureData.getValue(
-          Cesium.JulianDate.now()
-        ) as PovertyFeature;
-        onCountryClick(f);
+      if (Cesium.defined(picked) && picked.id && (picked.id as PovertyFeature).iso3) {
+        onCountryClick(picked.id as PovertyFeature);
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -225,45 +224,53 @@ export default function Globe({ onCountryClick }: Props) {
     }
   }, [layers.water]);
 
-  // ── Poverty + conflict entities ───────────────────────────────────────────
-  // Use a direct Zustand subscription instead of a React useEffect so entity
-  // updates never fire as a side-effect of unrelated re-renders (e.g. setSelected).
+  // ── Poverty + conflict point primitives ──────────────────────────────────
+  // PointPrimitiveCollection is GPU-batched — handles 3000+ points without
+  // the entity API's per-add event overhead that corrupts the pick buffer.
   useEffect(() => {
     function rebuild(state: ReturnType<typeof useGlobeStore.getState>) {
       const viewer = viewerRef.current;
       if (!viewer) return;
-      viewer.entities.removeAll();
 
-      if (state.layers.poverty.enabled) {
+      // Swap poverty collection
+      if (povertyPointsRef.current) {
+        viewer.scene.primitives.remove(povertyPointsRef.current);
+        povertyPointsRef.current = null;
+      }
+      if (state.layers.poverty.enabled && state.povertyFeatures.length > 0) {
+        const col = new Cesium.PointPrimitiveCollection();
         state.povertyFeatures.forEach((f) => {
-          viewer.entities.add({
+          col.add({
             position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat),
-            point: {
-              pixelSize: 5,
-              color: povertyColor(f.poverty_rate, state.layers.poverty.opacity),
-              outlineWidth: 0,
-              scaleByDistance: new Cesium.NearFarScalar(8e5, 1.8, 8e6, 0.4),
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            },
-            properties: new Cesium.PropertyBag({ featureData: f }),
+            color: povertyColor(f.poverty_rate, state.layers.poverty.opacity),
+            pixelSize: 5,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            scaleByDistance: new Cesium.NearFarScalar(8e5, 1.8, 8e6, 0.4),
+            id: f,
           });
         });
+        viewer.scene.primitives.add(col);
+        povertyPointsRef.current = col;
       }
 
-      if (state.layers.conflict.enabled) {
+      // Swap conflict collection
+      if (conflictPointsRef.current) {
+        viewer.scene.primitives.remove(conflictPointsRef.current);
+        conflictPointsRef.current = null;
+      }
+      if (state.layers.conflict.enabled && state.conflictEvents.length > 0) {
+        const col = new Cesium.PointPrimitiveCollection();
         state.conflictEvents.forEach((ev) => {
-          viewer.entities.add({
+          col.add({
             position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat),
-            point: {
-              pixelSize: 9,
-              color: conflictColor(ev.fatalities).withAlpha(state.layers.conflict.opacity),
-              outlineColor: Cesium.Color.RED.withAlpha(0.5),
-              outlineWidth: 2,
-              scaleByDistance: new Cesium.NearFarScalar(1e6, 1.8, 8e6, 0.6),
-              disableDepthTestDistance: Number.POSITIVE_INFINITY,
-            },
+            color: conflictColor(ev.fatalities).withAlpha(state.layers.conflict.opacity),
+            pixelSize: 9,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            scaleByDistance: new Cesium.NearFarScalar(1e6, 1.8, 8e6, 0.6),
           });
         });
+        viewer.scene.primitives.add(col);
+        conflictPointsRef.current = col;
       }
     }
 
@@ -271,7 +278,6 @@ export default function Globe({ onCountryClick }: Props) {
     let prevConflict = useGlobeStore.getState().conflictEvents;
     let prevLayers = useGlobeStore.getState().layers;
 
-    // Build once immediately (viewer may not exist yet — rebuild is a no-op then)
     rebuild(useGlobeStore.getState());
 
     const unsub = useGlobeStore.subscribe((state) => {
