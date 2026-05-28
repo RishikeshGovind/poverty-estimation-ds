@@ -45,7 +45,7 @@ export function useWorldBank(year: number) {
       // Fetch current-year poverty + life expectancy (HDI proxy) + 10-year poverty history
       const povertyUrl = `https://api.worldbank.org/v2/country/${isos}/indicator/SI.POV.DDAY?date=${year}&format=json&per_page=100`;
       const hdiUrl = `https://api.worldbank.org/v2/country/${isos}/indicator/SP.DYN.LE00.IN?date=${year}&format=json&per_page=100`;
-      const histUrl = `https://api.worldbank.org/v2/country/${isos}/indicator/SI.POV.DDAY?date=2014:2023&format=json&per_page=500&mrv=1`;
+      const histUrl = `https://api.worldbank.org/v2/country/${isos}/indicator/SI.POV.DDAY?date=2014:2023&format=json&per_page=500`;
 
       let povertyMap: Record<string, number | null> = {};
       let hdiMap: Record<string, number | null> = {};
@@ -56,7 +56,7 @@ export function useWorldBank(year: number) {
         const [pRes, hRes, tRes] = await Promise.all([
           fetch(povertyUrl),
           fetch(hdiUrl),
-          fetch(`https://api.worldbank.org/v2/country/${isos}/indicator/SI.POV.DDAY?date=2014:2023&format=json&per_page=500`),
+          fetch(histUrl),
         ]);
         const [pData, hData, tData] = await Promise.all([
           pRes.json(), hRes.json(), tRes.json(),
