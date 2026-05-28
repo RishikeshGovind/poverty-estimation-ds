@@ -328,8 +328,8 @@ export default function Globe({ onCountryClick }: Props) {
           if (!pv || !pv.position || typeof pv.position === "boolean") continue;
           const gmst = satellite.gstime(now);
           const geo = satellite.eciToGeodetic(pv.position as satellite.EciVec3<number>, gmst);
-          const lat = satellite.radiansToDegrees(geo.latitude);
-          const lon = satellite.radiansToDegrees(geo.longitude);
+          const lat = geo.latitude  * (180 / Math.PI);
+          const lon = geo.longitude * (180 / Math.PI);
           const altM = geo.height * 1000;
           satCol.add({
             position: Cesium.Cartesian3.fromDegrees(lon, lat, altM),
