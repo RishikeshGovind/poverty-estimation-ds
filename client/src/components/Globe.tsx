@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
+import * as satellite from "satellite.js";
 import { useGlobeStore } from "../store/globeStore";
 import type { PovertyFeature } from "../store/globeStore";
 
@@ -58,20 +59,26 @@ export default function Globe({ onCountryClick }: Props) {
     // Remove default Bing Maps/Ion layer — we manage all imagery ourselves
     viewer.imageryLayers.removeAll();
 
-    // Pure black ocean/land base — gives the "Earth at night from space" look
-    viewer.scene.globe.baseColor = Cesium.Color.BLACK;
+    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#05080f");
     viewer.scene.backgroundColor = Cesium.Color.BLACK;
 
-    // Subtle country-borders-only tile layer (very low opacity, just for geography reference)
+    // Esri World Imagery — real satellite photos of Earth
+    viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        credit: "© Esri, Maxar, Earthstar Geographics",
+        maximumLevel: 19,
+      })
+    );
+    // Subtle dark overlay to keep the dashboard aesthetic without washing out imagery
     viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
         credit: "© CartoDB",
-        minimumLevel: 0,
         maximumLevel: 19,
       })
     );
-    viewer.imageryLayers.get(0).alpha = 0.25; // barely visible — just ghost borders
+    viewer.imageryLayers.get(1).alpha = 0.45;
 
     // Focus on Africa
     viewer.camera.setView({
@@ -294,6 +301,81 @@ export default function Globe({ onCountryClick }: Props) {
     });
 
     return unsub;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Live satellite tracking ───────────────────────────────────────────────
+  useEffect(() => {
+    interface TLE { name: string; line1: string; line2: string }
+    let tles: TLE[] = [];
+    let satCol: Cesium.PointPrimitiveCollection | null = null;
+    let timerId: ReturnType<typeof setInterval>;
+
+    function updatePositions() {
+      const viewer = viewerRef.current;
+      if (!viewer || tles.length === 0) return;
+
+      if (satCol) {
+        viewer.scene.primitives.remove(satCol);
+      }
+      satCol = new Cesium.PointPrimitiveCollection();
+      const now = new Date();
+
+      for (const tle of tles) {
+        try {
+          const satrec = satellite.twoline2satrec(tle.line1, tle.line2);
+          const pv = satellite.propagate(satrec, now);
+          if (!pv.position || typeof pv.position === "boolean") continue;
+          const gmst = satellite.gstime(now);
+          const geo = satellite.eciToGeodetic(pv.position as satellite.EciVec3<number>, gmst);
+          const lat = satellite.radiansToDegrees(geo.latitude);
+          const lon = satellite.radiansToDegrees(geo.longitude);
+          const altM = geo.height * 1000;
+          satCol.add({
+            position: Cesium.Cartesian3.fromDegrees(lon, lat, altM),
+            color: Cesium.Color.CYAN.withAlpha(0.9),
+            pixelSize: 5,
+            outlineColor: Cesium.Color.WHITE.withAlpha(0.4),
+            outlineWidth: 1,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          });
+        } catch {
+          continue;
+        }
+      }
+      viewer.scene.primitives.add(satCol);
+    }
+
+    async function loadAndStart() {
+      try {
+        // Earth-observation satellites (Sentinel, Landsat, VIIRS…) — free, CORS-enabled
+        const res = await fetch(
+          "https://celestrak.org/NOSTR/GP.php?GROUP=earth-observers&FORMAT=tle",
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const text = await res.text();
+        const lines = text.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+        for (let i = 0; i + 2 < lines.length; i += 3) {
+          tles.push({ name: lines[i], line1: lines[i + 1], line2: lines[i + 2] });
+          if (tles.length >= 30) break;
+        }
+      } catch {
+        return; // silently skip if CelesTrak unreachable
+      }
+      updatePositions();
+      timerId = setInterval(updatePositions, 10_000); // refresh every 10 s
+    }
+
+    loadAndStart();
+
+    return () => {
+      clearInterval(timerId);
+      const viewer = viewerRef.current;
+      if (satCol && viewer && !viewer.isDestroyed()) {
+        viewer.scene.primitives.remove(satCol);
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
