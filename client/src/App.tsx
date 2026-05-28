@@ -6,6 +6,7 @@ import Timeline from "./components/Timeline";
 import InsightsFeed from "./components/InsightsFeed";
 import AskAfricaLens from "./components/AskAfricaLens";
 import RegionPopup from "./components/RegionPopup";
+import SatellitePopup from "./components/SatellitePopup";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useGlobeStore } from "./store/globeStore";
 import { useWorldBank } from "./hooks/useWorldBank";
@@ -24,7 +25,7 @@ function DataLoader() {
 }
 
 export default function App() {
-  const { selected, setSelected } = useGlobeStore();
+  const { selected, setSelected, selectedSatellite } = useGlobeStore();
 
   return (
     <div className="w-screen h-screen overflow-hidden bg-black">
@@ -48,6 +49,9 @@ export default function App() {
 
       {/* Country popup on click */}
       {selected && <RegionPopup feature={selected} />}
+
+      {/* Satellite popup on click */}
+      {selectedSatellite && <SatellitePopup />}
     </div>
   );
 }

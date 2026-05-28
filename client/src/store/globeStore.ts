@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { SatelliteInfo } from "../utils/orbitPropagator";
 
 export type LayerId =
   | "nightlights"
@@ -72,6 +73,12 @@ interface GlobeStore {
   // Fly-to target (lat, lon, height)
   flyTo: [number, number, number] | null;
   setFlyTo: (t: [number, number, number] | null) => void;
+
+  // Selected satellite popup
+  selectedSatellite: SatelliteInfo | null;
+  setSelectedSatellite: (s: SatelliteInfo | null) => void;
+  satEpochMs: number;
+  setSatEpochMs: (ms: number) => void;
 }
 
 const DEFAULT_LAYERS: Record<LayerId, LayerState> = {
@@ -121,4 +128,9 @@ export const useGlobeStore = create<GlobeStore>((set) => ({
 
   flyTo: null,
   setFlyTo: (flyTo) => set({ flyTo }),
+
+  selectedSatellite: null,
+  setSelectedSatellite: (selectedSatellite) => set({ selectedSatellite }),
+  satEpochMs: 0,
+  setSatEpochMs: (satEpochMs) => set({ satEpochMs }),
 }));

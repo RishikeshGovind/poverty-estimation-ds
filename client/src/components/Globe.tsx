@@ -2,53 +2,8 @@ import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import { useGlobeStore } from "../store/globeStore";
 import type { PovertyFeature } from "../store/globeStore";
-
-// ── Keplerian orbit propagator (no external dependency) ───────────────────────
-const MU = 3.986e14;          // Earth gravitational parameter (m³/s²)
-const R_EARTH = 6.371e6;      // Earth radius (m)
-const OMEGA_E = 7.2921150e-5; // Earth rotation rate (rad/s)
-const J2000_S = 946728000;    // Unix timestamp of J2000.0 epoch (s)
-
-interface Orbit {
-  label: string; altKm: number; incDeg: number; raanDeg: number; nu0Deg: number;
-}
-
-const SAT_ORBITS: Orbit[] = [
-  { label: "ISS",          altKm: 408, incDeg: 51.6, raanDeg:   0, nu0Deg:   0 },
-  { label: "Tiangong",     altKm: 390, incDeg: 41.5, raanDeg:  36, nu0Deg:  22 },
-  { label: "Sentinel-2A",  altKm: 786, incDeg: 98.6, raanDeg:  72, nu0Deg:  44 },
-  { label: "Sentinel-2B",  altKm: 786, incDeg: 98.6, raanDeg: 108, nu0Deg:  66 },
-  { label: "Landsat-8",    altKm: 705, incDeg: 98.2, raanDeg: 144, nu0Deg:  88 },
-  { label: "Landsat-9",    altKm: 705, incDeg: 98.2, raanDeg: 180, nu0Deg: 110 },
-  { label: "VIIRS / SNPP", altKm: 824, incDeg: 98.7, raanDeg: 216, nu0Deg: 132 },
-  { label: "MODIS Terra",  altKm: 705, incDeg: 98.2, raanDeg: 252, nu0Deg: 154 },
-  { label: "MODIS Aqua",   altKm: 705, incDeg: 98.2, raanDeg: 288, nu0Deg: 176 },
-  { label: "Hubble",       altKm: 540, incDeg: 28.5, raanDeg: 324, nu0Deg: 198 },
-];
-
-function orbitCartesian(orbit: Orbit, dtSec: number, epochMs: number): Cesium.Cartesian3 {
-  const a = R_EARTH + orbit.altKm * 1e3;
-  const n = Math.sqrt(MU / (a * a * a));
-  const inc  = orbit.incDeg  * Math.PI / 180;
-  const raan = orbit.raanDeg * Math.PI / 180;
-  const nu   = (orbit.nu0Deg * Math.PI / 180) + n * dtSec;
-
-  // Perifocal → ECI (circular orbit, argument of periapsis = 0)
-  const xP = a * Math.cos(nu), yP = a * Math.sin(nu);
-  const xE = xP * Math.cos(raan) - yP * Math.cos(inc) * Math.sin(raan);
-  const yE = xP * Math.sin(raan) + yP * Math.cos(inc) * Math.cos(raan);
-  const zE = yP * Math.sin(inc);
-
-  // ECI → ECEF (rotate by GMST)
-  const t0   = epochMs / 1000 - J2000_S;
-  const gmst = (280.46061837 + 360.98564736629 * t0 / 86400) * Math.PI / 180
-             + OMEGA_E * dtSec;
-  return new Cesium.Cartesian3(
-    xE * Math.cos(gmst) + yE * Math.sin(gmst),
-   -xE * Math.sin(gmst) + yE * Math.cos(gmst),
-    zE
-  );
-}
+import { SAT_ORBITS, orbitXYZ, MU, R_EARTH } from "../utils/orbitPropagator";
+import type { SatelliteInfo } from "../utils/orbitPropagator";
 
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN ?? "";
 
@@ -59,7 +14,7 @@ function povertyColor(rate: number | null, opacity: number): Cesium.Color {
 
 function conflictColor(fatalities: number): Cesium.Color {
   if (fatalities > 15) return Cesium.Color.RED.withAlpha(0.95);
-  if (fatalities > 5) return Cesium.Color.ORANGE.withAlpha(0.9);
+  if (fatalities > 5)  return Cesium.Color.ORANGE.withAlpha(0.9);
   return Cesium.Color.YELLOW.withAlpha(0.85);
 }
 
@@ -68,18 +23,26 @@ interface Props {
 }
 
 export default function Globe({ onCountryClick }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<Cesium.Viewer | null>(null);
-  const nlLayerRef = useRef<Cesium.ImageryLayer | null>(null);
-  const ndviLayerRef = useRef<Cesium.ImageryLayer | null>(null);
+  const containerRef      = useRef<HTMLDivElement>(null);
+  const viewerRef         = useRef<Cesium.Viewer | null>(null);
+  const nlLayerRef        = useRef<Cesium.ImageryLayer | null>(null);
+  const ndviLayerRef      = useRef<Cesium.ImageryLayer | null>(null);
   const settlementsLayerRef = useRef<Cesium.ImageryLayer | null>(null);
-  const infraLayerRef = useRef<Cesium.ImageryLayer | null>(null);
-  const waterLayerRef = useRef<Cesium.ImageryLayer | null>(null);
-  const povertyPointsRef = useRef<Cesium.PointPrimitiveCollection | null>(null);
+  const infraLayerRef     = useRef<Cesium.ImageryLayer | null>(null);
+  const waterLayerRef     = useRef<Cesium.ImageryLayer | null>(null);
+  const povertyPointsRef  = useRef<Cesium.PointPrimitiveCollection | null>(null);
   const conflictPointsRef = useRef<Cesium.PointPrimitiveCollection | null>(null);
+  // satellite entity id → SatelliteInfo lookup for click detection
+  const satInfoRef        = useRef<Map<string, SatelliteInfo>>(new Map());
+  // epoch used for the current satellite animation (shared with click handler)
+  const satEpochMsRef     = useRef<number>(0);
+  // currently displayed full-orbit groundtrack entity
+  const groundtrackRef    = useRef<Cesium.Entity | null>(null);
+  // currently highlighted satellite entity (reset color on deselect)
+  const highlightedEntityRef = useRef<Cesium.Entity | null>(null);
 
-  const layers = useGlobeStore((s) => s.layers);
-  const flyTo = useGlobeStore((s) => s.flyTo);
+  const layers   = useGlobeStore((s) => s.layers);
+  const flyTo    = useGlobeStore((s) => s.flyTo);
   const setFlyTo = useGlobeStore((s) => s.setFlyTo);
 
   // ── Init viewer once ──────────────────────────────────────────────────────
@@ -102,13 +65,11 @@ export default function Globe({ onCountryClick }: Props) {
       scene3DOnly: true,
     });
 
-    // Remove default Bing Maps/Ion layer — we manage all imagery ourselves
     viewer.imageryLayers.removeAll();
-
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#05080f");
     viewer.scene.backgroundColor = Cesium.Color.BLACK;
 
-    // Esri World Imagery — real satellite photos of Earth
+    // Esri World Imagery — real satellite photos
     viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -116,7 +77,7 @@ export default function Globe({ onCountryClick }: Props) {
         maximumLevel: 19,
       })
     );
-    // Subtle dark overlay to keep the dashboard aesthetic without washing out imagery
+    // Subtle dark overlay to preserve dashboard aesthetic
     viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
@@ -126,17 +87,38 @@ export default function Globe({ onCountryClick }: Props) {
     );
     viewer.imageryLayers.get(1).alpha = 0.45;
 
-    // Focus on Africa
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(20, 5, 12_000_000),
     });
 
-    // Click handler — works with PointPrimitive ids (stored directly as PovertyFeature)
+    // Click handler — detects both PointPrimitive (poverty/conflict) and Entity (satellite)
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((e: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
       const picked = viewer.scene.pick(e.position);
-      if (Cesium.defined(picked) && picked.id && (picked.id as PovertyFeature).iso3) {
+      const store  = useGlobeStore.getState();
+
+      if (!Cesium.defined(picked) || !picked.id) {
+        // Clicked empty space — dismiss all popups
+        store.setSelected(null);
+        store.setSelectedSatellite(null);
+        return;
+      }
+
+      // PointPrimitive ids are PovertyFeature objects (have .iso3 string)
+      if (typeof (picked.id as PovertyFeature).iso3 === "string") {
         onCountryClick(picked.id as PovertyFeature);
+        store.setSelectedSatellite(null);
+        return;
+      }
+
+      // Entity ids are Cesium.Entity instances (have .id UUID string)
+      const entityId = typeof (picked.id as Cesium.Entity).id === "string"
+        ? (picked.id as Cesium.Entity).id
+        : null;
+      if (entityId && satInfoRef.current.has(entityId)) {
+        store.setSelectedSatellite(satInfoRef.current.get(entityId)!);
+        store.setSatEpochMs(satEpochMsRef.current);
+        store.setSelected(null);
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -147,7 +129,6 @@ export default function Globe({ onCountryClick }: Props) {
       if (!viewer.isDestroyed()) viewer.destroy();
       viewerRef.current = null;
     };
-    // onCountryClick intentionally omitted — stable reference expected
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -167,7 +148,6 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.nightlights.enabled) {
       if (!nlLayerRef.current) {
-        // {TileMatrixSet} → "500m", {TileMatrix} → zoom level, {TileRow}/{TileCol} → tile coords
         nlLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.WebMapTileServiceImageryProvider({
             url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_SNPP_DayNightBand_ENCC/default/2023-10-01/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
@@ -182,7 +162,7 @@ export default function Globe({ onCountryClick }: Props) {
         );
       }
       nlLayerRef.current.alpha = layers.nightlights.opacity;
-      nlLayerRef.current.show = true;
+      nlLayerRef.current.show  = true;
     } else if (nlLayerRef.current) {
       nlLayerRef.current.show = false;
     }
@@ -208,13 +188,13 @@ export default function Globe({ onCountryClick }: Props) {
         );
       }
       ndviLayerRef.current.alpha = layers.ndvi.opacity;
-      ndviLayerRef.current.show = true;
+      ndviLayerRef.current.show  = true;
     } else if (ndviLayerRef.current) {
       ndviLayerRef.current.show = false;
     }
   }, [layers.ndvi]);
 
-  // ── Settlement density layer (CartoDB Light — grey urban footprints) ───────
+  // ── Settlement density layer ───────────────────────────────────────────────
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -229,13 +209,13 @@ export default function Globe({ onCountryClick }: Props) {
         );
       }
       settlementsLayerRef.current.alpha = layers.settlements.opacity;
-      settlementsLayerRef.current.show = true;
+      settlementsLayerRef.current.show  = true;
     } else if (settlementsLayerRef.current) {
       settlementsLayerRef.current.show = false;
     }
   }, [layers.settlements]);
 
-  // ── Infrastructure layer (HOT OpenStreetMap — roads, hospitals, schools) ───
+  // ── Infrastructure layer ───────────────────────────────────────────────────
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -250,13 +230,13 @@ export default function Globe({ onCountryClick }: Props) {
         );
       }
       infraLayerRef.current.alpha = layers.infrastructure.opacity;
-      infraLayerRef.current.show = true;
+      infraLayerRef.current.show  = true;
     } else if (infraLayerRef.current) {
       infraLayerRef.current.show = false;
     }
   }, [layers.infrastructure]);
 
-  // ── Water access layer (JRC Global Surface Water — permanent water bodies) ─
+  // ── Water access layer ─────────────────────────────────────────────────────
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -271,21 +251,18 @@ export default function Globe({ onCountryClick }: Props) {
         );
       }
       waterLayerRef.current.alpha = layers.water.opacity;
-      waterLayerRef.current.show = true;
+      waterLayerRef.current.show  = true;
     } else if (waterLayerRef.current) {
       waterLayerRef.current.show = false;
     }
   }, [layers.water]);
 
-  // ── Poverty + conflict point primitives ──────────────────────────────────
-  // PointPrimitiveCollection is GPU-batched — handles 3000+ points without
-  // the entity API's per-add event overhead that corrupts the pick buffer.
+  // ── Poverty + conflict point primitives ───────────────────────────────────
   useEffect(() => {
     function rebuild(state: ReturnType<typeof useGlobeStore.getState>) {
       const viewer = viewerRef.current;
       if (!viewer) return;
 
-      // Swap poverty collection
       if (povertyPointsRef.current) {
         viewer.scene.primitives.remove(povertyPointsRef.current);
         povertyPointsRef.current = null;
@@ -306,7 +283,6 @@ export default function Globe({ onCountryClick }: Props) {
         povertyPointsRef.current = col;
       }
 
-      // Swap conflict collection
       if (conflictPointsRef.current) {
         viewer.scene.primitives.remove(conflictPointsRef.current);
         conflictPointsRef.current = null;
@@ -327,30 +303,30 @@ export default function Globe({ onCountryClick }: Props) {
       }
     }
 
-    let prevPoverty = useGlobeStore.getState().povertyFeatures;
+    let prevPoverty  = useGlobeStore.getState().povertyFeatures;
     let prevConflict = useGlobeStore.getState().conflictEvents;
-    let prevLayers = useGlobeStore.getState().layers;
+    let prevLayers   = useGlobeStore.getState().layers;
 
     rebuild(useGlobeStore.getState());
 
     const unsub = useGlobeStore.subscribe((state) => {
       if (
         state.povertyFeatures !== prevPoverty ||
-        state.conflictEvents !== prevConflict ||
-        state.layers !== prevLayers
+        state.conflictEvents  !== prevConflict ||
+        state.layers          !== prevLayers
       ) {
-        prevPoverty = state.povertyFeatures;
+        prevPoverty  = state.povertyFeatures;
         prevConflict = state.conflictEvents;
-        prevLayers = state.layers;
+        prevLayers   = state.layers;
         rebuild(state);
       }
     });
 
     return unsub;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Live satellite tracking (Keplerian, no external fetch) ──────────────────
+  // ── Live satellite tracking (Keplerian, no external fetch) ────────────────
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
@@ -358,8 +334,10 @@ export default function Globe({ onCountryClick }: Props) {
     const DURATION = 5760;
     const STEP     = 60;
     const epochMs  = Date.now();
-    const startJD  = Cesium.JulianDate.fromDate(new Date(epochMs));
-    const stopJD   = Cesium.JulianDate.addSeconds(startJD, DURATION, new Cesium.JulianDate());
+    satEpochMsRef.current = epochMs;
+
+    const startJD = Cesium.JulianDate.fromDate(new Date(epochMs));
+    const stopJD  = Cesium.JulianDate.addSeconds(startJD, DURATION, new Cesium.JulianDate());
 
     viewer.clock.startTime     = startJD.clone();
     viewer.clock.stopTime      = stopJD.clone();
@@ -368,7 +346,9 @@ export default function Globe({ onCountryClick }: Props) {
     viewer.clock.multiplier    = 1;
     viewer.clock.shouldAnimate = true;
 
+    satInfoRef.current.clear();
     const satEntities: Cesium.Entity[] = [];
+
     for (const orbit of SAT_ORBITS) {
       const pos = new Cesium.SampledPositionProperty();
       pos.setInterpolationOptions({
@@ -376,12 +356,15 @@ export default function Globe({ onCountryClick }: Props) {
         interpolationAlgorithm: Cesium.LagrangePolynomialApproximation,
       });
       for (let dt = 0; dt <= DURATION; dt += STEP) {
+        const [x, y, z] = orbitXYZ(orbit, dt, epochMs);
         pos.addSample(
           Cesium.JulianDate.addSeconds(startJD, dt, new Cesium.JulianDate()),
-          orbitCartesian(orbit, dt, epochMs)
+          new Cesium.Cartesian3(x, y, z)
         );
       }
-      satEntities.push(viewer.entities.add({
+
+      const entity = viewer.entities.add({
+        name: orbit.label,
         availability: new Cesium.TimeIntervalCollection([
           new Cesium.TimeInterval({ start: startJD, stop: stopJD }),
         ]),
@@ -403,7 +386,21 @@ export default function Globe({ onCountryClick }: Props) {
           leadTime: 0,
           trailTime: 720,
         },
-      }));
+        label: {
+          text: orbit.label,
+          font: "10px monospace",
+          fillColor: Cesium.Color.CYAN,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset: new Cesium.Cartesian2(12, -4),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          translucencyByDistance: new Cesium.NearFarScalar(1e6, 1.0, 8e6, 0.0),
+        },
+      });
+
+      satInfoRef.current.set(entity.id, orbit);
+      satEntities.push(entity);
     }
 
     return () => {
@@ -413,9 +410,87 @@ export default function Globe({ onCountryClick }: Props) {
         v.clock.shouldAnimate = false;
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Full-orbit groundtrack when a satellite is selected ───────────────────
+  useEffect(() => {
+    function drawGroundtrack(sat: SatelliteInfo | null, epochMs: number) {
+      const viewer = viewerRef.current;
+      if (!viewer || viewer.isDestroyed()) return;
+
+      // Reset previously highlighted entity colour
+      if (highlightedEntityRef.current) {
+        const prev = highlightedEntityRef.current;
+        if (prev.point) {
+          prev.point.pixelSize  = new Cesium.ConstantProperty(7);
+          prev.point.color      = new Cesium.ConstantProperty(Cesium.Color.WHITE);
+          prev.point.outlineColor = new Cesium.ConstantProperty(Cesium.Color.CYAN);
+        }
+        highlightedEntityRef.current = null;
+      }
+
+      // Remove old groundtrack
+      if (groundtrackRef.current) {
+        viewer.entities.remove(groundtrackRef.current);
+        groundtrackRef.current = null;
+      }
+
+      if (!sat) return;
+
+      // Highlight the selected satellite entity
+      for (const [id, info] of satInfoRef.current.entries()) {
+        if (info.label === sat.label) {
+          const entity = viewer.entities.getById(id);
+          if (entity?.point) {
+            entity.point.pixelSize    = new Cesium.ConstantProperty(12);
+            entity.point.color        = new Cesium.ConstantProperty(Cesium.Color.YELLOW);
+            entity.point.outlineColor = new Cesium.ConstantProperty(Cesium.Color.ORANGE);
+            highlightedEntityRef.current = entity;
+          }
+          break;
+        }
+      }
+
+      // Draw one full orbit as a bright polyline
+      const a      = R_EARTH + sat.altKm * 1e3;
+      const T      = 2 * Math.PI * Math.sqrt((a * a * a) / MU);
+      const dtStart = (Date.now() - epochMs) / 1000;
+      const NSTEPS  = 200;
+      const positions: Cesium.Cartesian3[] = [];
+      for (let i = 0; i <= NSTEPS; i++) {
+        const [x, y, z] = orbitXYZ(sat, dtStart + (T * i) / NSTEPS, epochMs);
+        positions.push(new Cesium.Cartesian3(x, y, z));
+      }
+
+      groundtrackRef.current = viewer.entities.add({
+        polyline: {
+          positions,
+          width: 2,
+          material: new Cesium.ColorMaterialProperty(Cesium.Color.YELLOW.withAlpha(0.5)),
+          arcType: Cesium.ArcType.NONE,
+        },
+      });
+    }
+
+    let prevSat = useGlobeStore.getState().selectedSatellite;
+
+    const unsub = useGlobeStore.subscribe((state) => {
+      if (state.selectedSatellite !== prevSat) {
+        prevSat = state.selectedSatellite;
+        drawGroundtrack(state.selectedSatellite, state.satEpochMs || satEpochMsRef.current);
+      }
+    });
+
+    return () => {
+      unsub();
+      const viewer = viewerRef.current;
+      if (viewer && !viewer.isDestroyed() && groundtrackRef.current) {
+        viewer.entities.remove(groundtrackRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
