@@ -2,17 +2,23 @@ import { TrendingUp, TrendingDown, Minus, MapPin } from "lucide-react";
 import { useGlobeStore } from "../store/globeStore";
 import type { PovertyFeature } from "../store/globeStore";
 
-function TrendBadge({ delta }: { delta: number }) {
-  if (delta > 2)  return <span className="flex items-center gap-0.5 text-green-400 text-[10px]"><TrendingUp  size={10}/>{delta.toFixed(1)}%</span>;
-  if (delta < -2) return <span className="flex items-center gap-0.5 text-red-400   text-[10px]"><TrendingDown size={10}/>{Math.abs(delta).toFixed(1)}%</span>;
-  return               <span className="flex items-center gap-0.5 text-slate-500  text-[10px]"><Minus        size={10}/>stable</span>;
+// delta = poverty rate change (pp): negative means improvement, positive means worsening
+function TrendBadge({ delta }: { delta: number | null }) {
+  if (delta === null) return null;
+  // Poverty falling = good (green), rising = bad (red)
+  if (delta < -2) return <span className="flex items-center gap-0.5 text-green-400 text-[10px]"><TrendingDown size={10}/>{Math.abs(delta).toFixed(1)}pp</span>;
+  if (delta > 2)  return <span className="flex items-center gap-0.5 text-red-400   text-[10px]"><TrendingUp   size={10}/>+{delta.toFixed(1)}pp</span>;
+  return                 <span className="flex items-center gap-0.5 text-slate-500  text-[10px]"><Minus        size={10}/>stable</span>;
 }
 
 function InsightCard({ f, rank }: { f: PovertyFeature; rank: number }) {
   const { setSelected, setFlyTo } = useGlobeStore();
   const pRate = f.poverty_rate ?? 50;
   const isHigh = pRate > 55;
-  const delta = (Math.random() - 0.4) * 10;
+
+  // Real delta from World Bank historical series (first→last known value)
+  const trend = f.ntl_trend;
+  const delta = trend.length >= 2 ? trend[trend.length - 1] - trend[0] : null;
 
   return (
     <div className="border-b border-white/5 px-3 py-3 hover:bg-white/3 transition-colors cursor-default">

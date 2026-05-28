@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { useGlobeStore } from "../store/globeStore";
 import type { PovertyFeature } from "../store/globeStore";
 
-// Sub-Saharan Africa ISO3 codes with approximate centroids
 const SSA_COUNTRIES: { iso3: string; name: string; lat: number; lon: number }[] = [
   { iso3: "NGA", name: "Nigeria",           lat:  9.08,  lon:  8.68 },
   { iso3: "ETH", name: "Ethiopia",          lat:  9.15,  lon: 40.49 },
@@ -36,35 +35,32 @@ const SSA_COUNTRIES: { iso3: string; name: string; lat: number; lon: number }[] 
   { iso3: "HTI", name: "Haiti",             lat: 18.97,  lon: -72.29 },
 ];
 
-// Sparkline data shape: 10 year points
-function makeFakeTrend(base: number, noise = 0.05): number[] {
-  const arr: number[] = [];
-  let v = base;
-  for (let i = 0; i < 10; i++) {
-    v = Math.max(0, Math.min(1, v + (Math.random() - 0.5) * noise));
-    arr.push(parseFloat(v.toFixed(3)));
-  }
-  return arr;
-}
-
 export function useWorldBank(year: number) {
   const setPovertyFeatures = useGlobeStore((s) => s.setPovertyFeatures);
 
   useEffect(() => {
     async function load() {
-      const features: PovertyFeature[] = [];
-
-      // World Bank poverty headcount (SI.POV.DDAY) for each country
       const isos = SSA_COUNTRIES.map((c) => c.iso3).join(";");
-      const url = `https://api.worldbank.org/v2/country/${isos}/indicator/SI.POV.DDAY?date=${year}&format=json&per_page=100`;
+
+      // Fetch current-year poverty + life expectancy (HDI proxy) + 10-year poverty history
+      const povertyUrl = `https://api.worldbank.org/v2/country/${isos}/indicator/SI.POV.DDAY?date=${year}&format=json&per_page=100`;
       const hdiUrl = `https://api.worldbank.org/v2/country/${isos}/indicator/SP.DYN.LE00.IN?date=${year}&format=json&per_page=100`;
+      const histUrl = `https://api.worldbank.org/v2/country/${isos}/indicator/SI.POV.DDAY?date=2014:2023&format=json&per_page=500&mrv=1`;
 
       let povertyMap: Record<string, number | null> = {};
       let hdiMap: Record<string, number | null> = {};
+      // trendMap[iso3][year] = poverty_rate
+      const trendMap: Record<string, Record<number, number>> = {};
 
       try {
-        const [pRes, hRes] = await Promise.all([fetch(url), fetch(hdiUrl)]);
-        const [pData, hData] = await Promise.all([pRes.json(), hRes.json()]);
+        const [pRes, hRes, tRes] = await Promise.all([
+          fetch(povertyUrl),
+          fetch(hdiUrl),
+          fetch(`https://api.worldbank.org/v2/country/${isos}/indicator/SI.POV.DDAY?date=2014:2023&format=json&per_page=500`),
+        ]);
+        const [pData, hData, tData] = await Promise.all([
+          pRes.json(), hRes.json(), tRes.json(),
+        ]);
 
         if (Array.isArray(pData) && pData[1]) {
           pData[1].forEach((row: { countryiso3code: string; value: number | null }) => {
@@ -73,28 +69,44 @@ export function useWorldBank(year: number) {
         }
         if (Array.isArray(hData) && hData[1]) {
           hData[1].forEach((row: { countryiso3code: string; value: number | null }) => {
-            // Life expectancy as HDI proxy
             hdiMap[row.countryiso3code] = row.value != null ? row.value / 90 : null;
           });
         }
+        if (Array.isArray(tData) && tData[1]) {
+          tData[1].forEach((row: { countryiso3code: string; date: string; value: number | null }) => {
+            if (row.value != null) {
+              if (!trendMap[row.countryiso3code]) trendMap[row.countryiso3code] = {};
+              trendMap[row.countryiso3code][parseInt(row.date)] = parseFloat(row.value.toFixed(1));
+            }
+          });
+        }
       } catch {
-        // API unavailable — use demo values
+        // WB API unreachable — features will have null poverty_rate and be filtered out of InsightsFeed
       }
 
-      SSA_COUNTRIES.forEach(({ iso3, name, lat, lon }) => {
-        const pRate = povertyMap[iso3] ?? (30 + Math.random() * 40);
-        const hdi = hdiMap[iso3] ?? (0.3 + Math.random() * 0.4);
-        features.push({
+      const features: PovertyFeature[] = SSA_COUNTRIES.map(({ iso3, name, lat, lon }) => {
+        const countryHist = trendMap[iso3] ?? {};
+        const histYears = Object.keys(countryHist).map(Number).sort();
+
+        // Use most recent available year if the requested year has no data
+        const pRate =
+          povertyMap[iso3] ??
+          (histYears.length > 0 ? countryHist[histYears[histYears.length - 1]] : null);
+
+        // Build ordered poverty rate time series for sparkline
+        const povertyTrend = histYears.map((y) => countryHist[y]);
+
+        return {
           country: name,
           iso3,
           lat,
           lon,
           poverty_rate: pRate,
-          hdi,
+          hdi: hdiMap[iso3] ?? null,
           year,
-          ntl_trend: makeFakeTrend(0.2 + (1 - pRate / 100) * 0.5),
-          ndvi_trend: makeFakeTrend(0.5 + Math.random() * 0.3, 0.08),
-        });
+          ntl_trend: povertyTrend,  // real poverty rate % history (2014–2023, only years with data)
+          ndvi_trend: [],
+        };
       });
 
       setPovertyFeatures(features);

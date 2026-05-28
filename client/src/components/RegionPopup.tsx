@@ -13,8 +13,8 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
         <YAxis domain={["auto", "auto"]} hide />
         <Tooltip
           contentStyle={{ background: "#0a0a14", border: "1px solid #00FFFF33", fontSize: 10 }}
-          labelFormatter={(i) => `${2014 + (i as number)}`}
-          formatter={(v) => [typeof v === "number" ? v.toFixed(3) : v, ""]}
+          labelFormatter={() => ""}
+          formatter={(v) => [typeof v === "number" ? `${v.toFixed(1)}%` : v, "Poverty rate"]}
         />
         <Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} dot={false} />
       </LineChart>
@@ -32,6 +32,7 @@ export default function RegionPopup({ feature: f }: Props) {
   // Cluster features encode place info as "CLUSTER|adm1|urban"
   const isCluster = f.iso3.startsWith("CLUSTER|");
   const [, adm1Name = "", urbanRural = ""] = isCluster ? f.iso3.split("|") : [];
+  // Real poverty rate change (percentage points) from WB historical data
   const pTrend = f.ntl_trend.length >= 2
     ? f.ntl_trend[f.ntl_trend.length - 1] - f.ntl_trend[0]
     : 0;
@@ -82,26 +83,21 @@ export default function RegionPopup({ feature: f }: Props) {
         </div>
       </div>
 
-      {/* Trends — only show for country-level features with real trend data */}
-      {!isCluster && (
-        <>
-          <div className="px-4 pb-2">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">NTL Trend</p>
-              <span className={`flex items-center gap-0.5 text-[10px] font-mono ${
-                pTrend >= 0 ? "text-green-400" : "text-red-400"
-              }`}>
-                {pTrend >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                {(pTrend * 100).toFixed(1)}%
-              </span>
-            </div>
-            <Sparkline data={f.ntl_trend} color="#FBBF24" />
+      {/* Poverty rate trend — WB features only, requires ≥2 data points */}
+      {!isCluster && f.ntl_trend.length >= 2 && (
+        <div className="px-4 pb-2">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Poverty Rate Trend (%)</p>
+            <span className={`flex items-center gap-0.5 text-[10px] font-mono ${
+              pTrend < 0 ? "text-green-400" : "text-red-400"
+            }`}>
+              {pTrend < 0 ? <TrendingDown size={10} /> : <TrendingUp size={10} />}
+              {pTrend < 0 ? "" : "+"}{(pTrend).toFixed(1)}pp
+            </span>
           </div>
-          <div className="px-4 pb-3">
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">NDVI Trend</p>
-            <Sparkline data={f.ndvi_trend} color="#22C55E" />
-          </div>
-        </>
+          <Sparkline data={f.ntl_trend} color="#FBBF24" />
+          <p className="text-[9px] text-slate-600 mt-0.5">Source: World Bank SI.POV.DDAY, 2014–2023</p>
+        </div>
       )}
 
       {/* Cluster model info */}
