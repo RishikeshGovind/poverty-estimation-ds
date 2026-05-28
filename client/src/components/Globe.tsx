@@ -312,19 +312,25 @@ export default function Globe({ onCountryClick }: Props) {
 
     async function loadAndRender() {
       const tles: TLE[] = [];
-      try {
-        const res = await fetch(
-          "https://celestrak.org/NOSTR/GP.php?GROUP=earth-observers&FORMAT=tle",
-          { cache: "no-store" }
-        );
-        if (!res.ok || cancelled) return;
-        const text = await res.text();
-        const lines = text.trim().split("\n").map((l) => l.trim()).filter(Boolean);
-        for (let i = 0; i + 2 < lines.length; i += 3) {
-          tles.push({ name: lines[i], line1: lines[i + 1], line2: lines[i + 2] });
-          if (tles.length >= 25) break;
-        }
-      } catch { return; }
+      // Try two groups — stations (ISS, Tiangong) then visual (100 brightest)
+      const GROUPS = ["stations", "visual"];
+      for (const group of GROUPS) {
+        try {
+          const res = await fetch(
+            `https://celestrak.org/NOSTR/GP.php?GROUP=${group}&FORMAT=tle`,
+            { cache: "no-store" }
+          );
+          if (!res.ok) continue;
+          const text = await res.text();
+          const lines = text.trim().split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+          for (let i = 0; i + 2 < lines.length; i += 3) {
+            tles.push({ name: lines[i], line1: lines[i + 1], line2: lines[i + 2] });
+            if (tles.length >= 25) break;
+          }
+          if (tles.length > 0) break;
+        } catch { continue; }
+      }
+      if (tles.length === 0) return;
 
       if (cancelled) return;
       const viewer = viewerRef.current;
@@ -377,10 +383,10 @@ export default function Globe({ onCountryClick }: Props) {
             ]),
             position: posProperty,
             point: {
-              pixelSize: 5,
-              color: Cesium.Color.CYAN.withAlpha(0.9),
-              outlineColor: Cesium.Color.WHITE.withAlpha(0.35),
-              outlineWidth: 1,
+              pixelSize: 8,
+              color: Cesium.Color.WHITE,
+              outlineColor: Cesium.Color.CYAN,
+              outlineWidth: 2,
               disableDepthTestDistance: Number.POSITIVE_INFINITY,
             },
             path: {
