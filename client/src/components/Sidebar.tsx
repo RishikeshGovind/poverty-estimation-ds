@@ -16,11 +16,11 @@ interface LayerDef {
 const LAYER_DEFS: LayerDef[] = [
   { id: "nightlights",    label: "Nighttime Lights",    color: "#FBBF24", icon: <Satellite size={14} />,   description: "Electrification proxy" },
   { id: "ndvi",           label: "Vegetation / NDVI",   color: "#22C55E", icon: <Leaf size={14} />,        description: "Food security proxy" },
-  { id: "settlements",    label: "Settlement Density",  color: "#F97316", icon: <Users size={14} />,       description: "HRSL / WorldPop" },
+  { id: "settlements",    label: "Settlement Density",  color: "#F97316", icon: <Users size={14} />,       description: "Urban footprint (CartoDB)" },
   { id: "poverty",        label: "Poverty Index",       color: "#EF4444", icon: <BarChart2 size={14} />,   description: "World Bank HDI" },
-  { id: "infrastructure", label: "Infrastructure",      color: "#60A5FA", icon: <Building size={14} />,   description: "Roads, hospitals, schools" },
+  { id: "infrastructure", label: "Infrastructure",      color: "#60A5FA", icon: <Building size={14} />,   description: "Roads, hospitals, schools (OSM)" },
   { id: "conflict",       label: "Conflict Zones",      color: "#EF4444", icon: <AlertTriangle size={14}/>,description: "ACLED events" },
-  { id: "water",          label: "Water Access",        color: "#38BDF8", icon: <Droplets size={14} />,   description: "JMP / surface water" },
+  { id: "water",          label: "Water Access",        color: "#38BDF8", icon: <Droplets size={14} />,   description: "JRC surface water (EC)" },
 ];
 
 export default function Sidebar() {

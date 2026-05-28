@@ -25,6 +25,9 @@ export default function Globe({ onCountryClick }: Props) {
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const nlLayerRef = useRef<Cesium.ImageryLayer | null>(null);
   const ndviLayerRef = useRef<Cesium.ImageryLayer | null>(null);
+  const settlementsLayerRef = useRef<Cesium.ImageryLayer | null>(null);
+  const infraLayerRef = useRef<Cesium.ImageryLayer | null>(null);
+  const waterLayerRef = useRef<Cesium.ImageryLayer | null>(null);
 
   const { layers, povertyFeatures, conflictEvents, flyTo, setFlyTo } = useGlobeStore();
 
@@ -156,6 +159,69 @@ export default function Globe({ onCountryClick }: Props) {
       ndviLayerRef.current.show = false;
     }
   }, [layers.ndvi]);
+
+  // ── Settlement density layer (CartoDB Light — grey urban footprints) ───────
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    if (layers.settlements.enabled) {
+      if (!settlementsLayerRef.current) {
+        settlementsLayerRef.current = viewer.imageryLayers.addImageryProvider(
+          new Cesium.UrlTemplateImageryProvider({
+            url: "https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
+            credit: "© CartoDB",
+            maximumLevel: 19,
+          })
+        );
+      }
+      settlementsLayerRef.current.alpha = layers.settlements.opacity;
+      settlementsLayerRef.current.show = true;
+    } else if (settlementsLayerRef.current) {
+      settlementsLayerRef.current.show = false;
+    }
+  }, [layers.settlements]);
+
+  // ── Infrastructure layer (HOT OpenStreetMap — roads, hospitals, schools) ───
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    if (layers.infrastructure.enabled) {
+      if (!infraLayerRef.current) {
+        infraLayerRef.current = viewer.imageryLayers.addImageryProvider(
+          new Cesium.UrlTemplateImageryProvider({
+            url: "https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+            credit: "© OpenStreetMap contributors, HOT",
+            maximumLevel: 18,
+          })
+        );
+      }
+      infraLayerRef.current.alpha = layers.infrastructure.opacity;
+      infraLayerRef.current.show = true;
+    } else if (infraLayerRef.current) {
+      infraLayerRef.current.show = false;
+    }
+  }, [layers.infrastructure]);
+
+  // ── Water access layer (JRC Global Surface Water — permanent water bodies) ─
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    if (layers.water.enabled) {
+      if (!waterLayerRef.current) {
+        waterLayerRef.current = viewer.imageryLayers.addImageryProvider(
+          new Cesium.UrlTemplateImageryProvider({
+            url: "https://storage.googleapis.com/global-surface-water/tiles/occurrence/{z}/{x}/{y}.png",
+            credit: "© EC JRC / Google",
+            maximumLevel: 13,
+          })
+        );
+      }
+      waterLayerRef.current.alpha = layers.water.opacity;
+      waterLayerRef.current.show = true;
+    } else if (waterLayerRef.current) {
+      waterLayerRef.current.show = false;
+    }
+  }, [layers.water]);
 
   // ── Poverty + conflict entities ───────────────────────────────────────────
   useEffect(() => {
