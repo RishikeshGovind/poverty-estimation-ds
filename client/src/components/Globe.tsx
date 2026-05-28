@@ -365,7 +365,7 @@ export default function Globe({ onCountryClick }: Props) {
     viewer.clock.stopTime      = stopJD.clone();
     viewer.clock.currentTime   = startJD.clone();
     viewer.clock.clockRange    = Cesium.ClockRange.LOOP_STOP;
-    viewer.clock.multiplier    = 60;
+    viewer.clock.multiplier    = 1;
     viewer.clock.shouldAnimate = true;
 
     const satEntities: Cesium.Entity[] = [];
