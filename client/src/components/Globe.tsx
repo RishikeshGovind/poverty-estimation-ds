@@ -29,7 +29,9 @@ export default function Globe({ onCountryClick }: Props) {
   const infraLayerRef = useRef<Cesium.ImageryLayer | null>(null);
   const waterLayerRef = useRef<Cesium.ImageryLayer | null>(null);
 
-  const { layers, povertyFeatures, conflictEvents, flyTo, setFlyTo } = useGlobeStore();
+  const layers = useGlobeStore((s) => s.layers);
+  const flyTo = useGlobeStore((s) => s.flyTo);
+  const setFlyTo = useGlobeStore((s) => s.setFlyTo);
 
   // ── Init viewer once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -224,43 +226,70 @@ export default function Globe({ onCountryClick }: Props) {
   }, [layers.water]);
 
   // ── Poverty + conflict entities ───────────────────────────────────────────
+  // Use a direct Zustand subscription instead of a React useEffect so entity
+  // updates never fire as a side-effect of unrelated re-renders (e.g. setSelected).
   useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-    viewer.entities.removeAll();
+    function rebuild(state: ReturnType<typeof useGlobeStore.getState>) {
+      const viewer = viewerRef.current;
+      if (!viewer) return;
+      viewer.entities.removeAll();
 
-    if (layers.poverty.enabled) {
-      povertyFeatures.forEach((f) => {
-        viewer.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat),
-          point: {
-            pixelSize: 5,
-            color: povertyColor(f.poverty_rate, layers.poverty.opacity),
-            outlineWidth: 0,
-            scaleByDistance: new Cesium.NearFarScalar(8e5, 1.8, 8e6, 0.4),
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          },
-          properties: new Cesium.PropertyBag({ featureData: f }),
+      if (state.layers.poverty.enabled) {
+        state.povertyFeatures.forEach((f) => {
+          viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat),
+            point: {
+              pixelSize: 5,
+              color: povertyColor(f.poverty_rate, state.layers.poverty.opacity),
+              outlineWidth: 0,
+              scaleByDistance: new Cesium.NearFarScalar(8e5, 1.8, 8e6, 0.4),
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+            properties: new Cesium.PropertyBag({ featureData: f }),
+          });
         });
-      });
+      }
+
+      if (state.layers.conflict.enabled) {
+        state.conflictEvents.forEach((ev) => {
+          viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat),
+            point: {
+              pixelSize: 9,
+              color: conflictColor(ev.fatalities).withAlpha(state.layers.conflict.opacity),
+              outlineColor: Cesium.Color.RED.withAlpha(0.5),
+              outlineWidth: 2,
+              scaleByDistance: new Cesium.NearFarScalar(1e6, 1.8, 8e6, 0.6),
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+          });
+        });
+      }
     }
 
-    if (layers.conflict.enabled) {
-      conflictEvents.forEach((ev) => {
-        viewer.entities.add({
-          position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat),
-          point: {
-            pixelSize: 9,
-            color: conflictColor(ev.fatalities).withAlpha(layers.conflict.opacity),
-            outlineColor: Cesium.Color.RED.withAlpha(0.5),
-            outlineWidth: 2,
-            scaleByDistance: new Cesium.NearFarScalar(1e6, 1.8, 8e6, 0.6),
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          },
-        });
-      });
-    }
-  }, [povertyFeatures, conflictEvents, layers.poverty, layers.conflict]);
+    let prevPoverty = useGlobeStore.getState().povertyFeatures;
+    let prevConflict = useGlobeStore.getState().conflictEvents;
+    let prevLayers = useGlobeStore.getState().layers;
+
+    // Build once immediately (viewer may not exist yet — rebuild is a no-op then)
+    rebuild(useGlobeStore.getState());
+
+    const unsub = useGlobeStore.subscribe((state) => {
+      if (
+        state.povertyFeatures !== prevPoverty ||
+        state.conflictEvents !== prevConflict ||
+        state.layers !== prevLayers
+      ) {
+        prevPoverty = state.povertyFeatures;
+        prevConflict = state.conflictEvents;
+        prevLayers = state.layers;
+        rebuild(state);
+      }
+    });
+
+    return unsub;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
