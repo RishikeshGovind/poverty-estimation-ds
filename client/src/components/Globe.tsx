@@ -325,7 +325,7 @@ export default function Globe({ onCountryClick }: Props) {
         try {
           const satrec = satellite.twoline2satrec(tle.line1, tle.line2);
           const pv = satellite.propagate(satrec, now);
-          if (!pv.position || typeof pv.position === "boolean") continue;
+          if (!pv || !pv.position || typeof pv.position === "boolean") continue;
           const gmst = satellite.gstime(now);
           const geo = satellite.eciToGeodetic(pv.position as satellite.EciVec3<number>, gmst);
           const lat = satellite.radiansToDegrees(geo.latitude);
