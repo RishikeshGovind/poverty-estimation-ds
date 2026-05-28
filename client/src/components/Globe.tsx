@@ -148,15 +148,13 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.nightlights.enabled) {
       if (!nlLayerRef.current) {
+        // UrlTemplateImageryProvider replaces {z}/{y}/{x} = TileMatrix/TileRow/TileCol
+        // WebMapTileServiceImageryProvider does NOT replace {TileMatrixSet} in URL templates
         nlLayerRef.current = viewer.imageryLayers.addImageryProvider(
-          new Cesium.WebMapTileServiceImageryProvider({
-            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_SNPP_DayNightBand_ENCC/default/2023-10-01/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
-            layer: "VIIRS_SNPP_DayNightBand_ENCC",
-            style: "default",
-            format: "image/png",
-            tileMatrixSetID: "500m",
-            maximumLevel: 8,
+          new Cesium.UrlTemplateImageryProvider({
+            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_SNPP_DayNightBand_ENCC/default/2023-01-01/500m/{z}/{y}/{x}.png",
             tilingScheme: new Cesium.GeographicTilingScheme(),
+            maximumLevel: 8,
             credit: "NASA GSFC / GIBS",
           })
         );
@@ -175,14 +173,10 @@ export default function Globe({ onCountryClick }: Props) {
     if (layers.ndvi.enabled) {
       if (!ndviLayerRef.current) {
         ndviLayerRef.current = viewer.imageryLayers.addImageryProvider(
-          new Cesium.WebMapTileServiceImageryProvider({
-            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_NDVI_8Day/default/2023-01-01/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
-            layer: "MODIS_Terra_NDVI_8Day",
-            style: "default",
-            format: "image/png",
-            tileMatrixSetID: "250m",
-            maximumLevel: 8,
+          new Cesium.UrlTemplateImageryProvider({
+            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_NDVI_8Day/default/2023-06-01/250m/{z}/{y}/{x}.png",
             tilingScheme: new Cesium.GeographicTilingScheme(),
+            maximumLevel: 8,
             credit: "NASA GSFC / GIBS",
           })
         );
@@ -200,9 +194,10 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.settlements.enabled) {
       if (!settlementsLayerRef.current) {
+        // dark_matter gives visible white urban outlines over satellite imagery
         settlementsLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
-            url: "https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
+            url: "https://basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}.png",
             credit: "© CartoDB",
             maximumLevel: 19,
           })
@@ -242,11 +237,12 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.water.enabled) {
       if (!waterLayerRef.current) {
+        // CartoDB Voyager shows rivers, lakes and ocean in blue — JRC bucket URL is dead/CORS
         waterLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
-            url: "https://storage.googleapis.com/global-surface-water/tiles/occurrence/{z}/{x}/{y}.png",
-            credit: "© EC JRC / Google",
-            maximumLevel: 13,
+            url: "https://basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
+            credit: "© CartoDB",
+            maximumLevel: 19,
           })
         );
       }
