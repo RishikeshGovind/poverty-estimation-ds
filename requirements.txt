@@ -17,6 +17,9 @@ planetary-computer
 # NASA Earthdata (VIIRS nighttime lights)
 earthaccess
 
+# Google Earth Engine (Phase 1 satellite extraction pipeline)
+earthengine-api>=0.1.370
+
 # DHS household recode (Stata .DTA files)
 pyreadstat
 
