@@ -69,15 +69,8 @@ export default function Globe({ onCountryClick }: Props) {
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#05080f");
     viewer.scene.backgroundColor = Cesium.Color.BLACK;
 
-    // Esri World Physical Map — cloud-free terrain + bathymetry, no real-time cloud cover
-    viewer.imageryLayers.addImageryProvider(
-      new Cesium.UrlTemplateImageryProvider({
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}",
-        credit: "© Esri",
-        maximumLevel: 8,
-      })
-    );
-    // Dark overlay — gives the intelligence-dashboard aesthetic
+    // CartoDB Dark Matter — clean dark base, no clouds, no satellite scan-line artefacts.
+    // Shows coastlines and continent shapes in subtle dark grey; data layers go on top.
     viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
@@ -85,7 +78,6 @@ export default function Globe({ onCountryClick }: Props) {
         maximumLevel: 19,
       })
     );
-    viewer.imageryLayers.get(1).alpha = 0.55;
 
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(20, 5, 12_000_000),

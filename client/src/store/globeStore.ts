@@ -82,7 +82,7 @@ interface GlobeStore {
 }
 
 const DEFAULT_LAYERS: Record<LayerId, LayerState> = {
-  nightlights:    { enabled: true,  opacity: 0.85 },
+  nightlights:    { enabled: false, opacity: 0.80 },
   ndvi:           { enabled: false, opacity: 0.75 },
   settlements:    { enabled: false, opacity: 0.70 },
   poverty:        { enabled: true,  opacity: 0.80 },
