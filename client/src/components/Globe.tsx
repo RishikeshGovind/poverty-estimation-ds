@@ -41,9 +41,11 @@ export default function Globe({ onCountryClick }: Props) {
   // currently highlighted satellite entity (reset color on deselect)
   const highlightedEntityRef = useRef<Cesium.Entity | null>(null);
 
-  const layers   = useGlobeStore((s) => s.layers);
-  const flyTo    = useGlobeStore((s) => s.flyTo);
-  const setFlyTo = useGlobeStore((s) => s.setFlyTo);
+  const layers          = useGlobeStore((s) => s.layers);
+  const flyTo           = useGlobeStore((s) => s.flyTo);
+  const setFlyTo        = useGlobeStore((s) => s.setFlyTo);
+  const conflictEvents  = useGlobeStore((s) => s.conflictEvents);
+  const povertyFeatures = useGlobeStore((s) => s.povertyFeatures);
 
   // ── Init viewer once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -260,74 +262,54 @@ export default function Globe({ onCountryClick }: Props) {
     }
   }, [layers.water]);
 
-  // ── Poverty + conflict point primitives ───────────────────────────────────
+  // ── Poverty point primitives ──────────────────────────────────────────────
   useEffect(() => {
-    function rebuild(state: ReturnType<typeof useGlobeStore.getState>) {
-      const viewer = viewerRef.current;
-      if (!viewer) return;
-
-      if (povertyPointsRef.current) {
-        viewer.scene.primitives.remove(povertyPointsRef.current);
-        povertyPointsRef.current = null;
-      }
-      if (state.layers.poverty.enabled && state.povertyFeatures.length > 0) {
-        const col = new Cesium.PointPrimitiveCollection();
-        state.povertyFeatures.forEach((f) => {
-          col.add({
-            position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 20000),
-            color: povertyColor(f.poverty_rate, state.layers.poverty.opacity),
-            pixelSize: 9,
-            outlineColor: Cesium.Color.WHITE.withAlpha(0.7),
-            outlineWidth: 1.5,
-            scaleByDistance: new Cesium.NearFarScalar(5e5, 2.0, 1e7, 0.7),
-            id: f,
-          });
-        });
-        viewer.scene.primitives.add(col);
-        povertyPointsRef.current = col;
-      }
-
-      if (conflictPointsRef.current) {
-        viewer.scene.primitives.remove(conflictPointsRef.current);
-        conflictPointsRef.current = null;
-      }
-      if (state.layers.conflict.enabled && state.conflictEvents.length > 0) {
-        const col = new Cesium.PointPrimitiveCollection();
-        state.conflictEvents.forEach((ev) => {
-          col.add({
-            position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat, 20000),
-            color: conflictColor(ev.fatalities).withAlpha(state.layers.conflict.opacity),
-            pixelSize: 9,
-            scaleByDistance: new Cesium.NearFarScalar(1e6, 1.8, 8e6, 0.6),
-          });
-        });
-        viewer.scene.primitives.add(col);
-        conflictPointsRef.current = col;
-      }
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    if (povertyPointsRef.current) {
+      viewer.scene.primitives.remove(povertyPointsRef.current);
+      povertyPointsRef.current = null;
     }
+    if (layers.poverty.enabled && povertyFeatures.length > 0) {
+      const col = new Cesium.PointPrimitiveCollection();
+      povertyFeatures.forEach((f) => {
+        col.add({
+          position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 20000),
+          color: povertyColor(f.poverty_rate, layers.poverty.opacity),
+          pixelSize: 9,
+          outlineColor: Cesium.Color.WHITE.withAlpha(0.7),
+          outlineWidth: 1.5,
+          scaleByDistance: new Cesium.NearFarScalar(5e5, 2.0, 1e7, 0.7),
+          id: f,
+        });
+      });
+      viewer.scene.primitives.add(col);
+      povertyPointsRef.current = col;
+    }
+  }, [layers.poverty, povertyFeatures]);
 
-    let prevPoverty  = useGlobeStore.getState().povertyFeatures;
-    let prevConflict = useGlobeStore.getState().conflictEvents;
-    let prevLayers   = useGlobeStore.getState().layers;
-
-    rebuild(useGlobeStore.getState());
-
-    const unsub = useGlobeStore.subscribe((state) => {
-      if (
-        state.povertyFeatures !== prevPoverty ||
-        state.conflictEvents  !== prevConflict ||
-        state.layers          !== prevLayers
-      ) {
-        prevPoverty  = state.povertyFeatures;
-        prevConflict = state.conflictEvents;
-        prevLayers   = state.layers;
-        rebuild(state);
-      }
-    });
-
-    return unsub;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // ── Conflict point primitives ─────────────────────────────────────────────
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    if (conflictPointsRef.current) {
+      viewer.scene.primitives.remove(conflictPointsRef.current);
+      conflictPointsRef.current = null;
+    }
+    if (layers.conflict.enabled && conflictEvents.length > 0) {
+      const col = new Cesium.PointPrimitiveCollection();
+      conflictEvents.forEach((ev) => {
+        col.add({
+          position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat, 20000),
+          color: conflictColor(ev.fatalities).withAlpha(layers.conflict.opacity),
+          pixelSize: 9,
+          scaleByDistance: new Cesium.NearFarScalar(1e6, 1.8, 8e6, 0.6),
+        });
+      });
+      viewer.scene.primitives.add(col);
+      conflictPointsRef.current = col;
+    }
+  }, [layers.conflict, conflictEvents]);
 
   // ── Live satellite tracking (Keplerian, no external fetch) ────────────────
   useEffect(() => {
