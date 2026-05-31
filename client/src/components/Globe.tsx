@@ -262,73 +262,71 @@ export default function Globe({ onCountryClick }: Props) {
 
   // ── Poverty + conflict point primitives ───────────────────────────────────
   useEffect(() => {
-    let prevPovertyFeatures = useGlobeStore.getState().povertyFeatures;
-    let prevConflictEvents  = useGlobeStore.getState().conflictEvents;
+    let prevPoverty  = useGlobeStore.getState().povertyFeatures;
+    let prevConflict = useGlobeStore.getState().conflictEvents;
+    let prevLayers   = useGlobeStore.getState().layers;
 
     function rebuild(state: ReturnType<typeof useGlobeStore.getState>) {
       const viewer = viewerRef.current;
       if (!viewer) return;
 
-      // Recreate when data changes; show/hide when only the toggle changes.
-      const povertyDataChanged = state.povertyFeatures !== prevPovertyFeatures;
-      const conflictDataChanged = state.conflictEvents !== prevConflictEvents;
-      prevPovertyFeatures = state.povertyFeatures;
-      prevConflictEvents  = state.conflictEvents;
-
-      if (povertyDataChanged && povertyPointsRef.current) {
+      if (povertyPointsRef.current) {
         viewer.scene.primitives.remove(povertyPointsRef.current);
         povertyPointsRef.current = null;
       }
       if (state.layers.poverty.enabled && state.povertyFeatures.length > 0) {
-        if (!povertyPointsRef.current) {
-          const col = new Cesium.PointPrimitiveCollection();
-          state.povertyFeatures.forEach((f) => {
-            col.add({
-              position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 20000),
-              color: povertyColor(f.poverty_rate, state.layers.poverty.opacity),
-              pixelSize: 9,
-              outlineColor: Cesium.Color.WHITE.withAlpha(0.7),
-              outlineWidth: 1.5,
-              scaleByDistance: new Cesium.NearFarScalar(5e5, 2.0, 1e7, 0.7),
-              id: f,
-            });
+        const col = new Cesium.PointPrimitiveCollection();
+        state.povertyFeatures.forEach((f) => {
+          col.add({
+            position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 20000),
+            color: povertyColor(f.poverty_rate, state.layers.poverty.opacity),
+            pixelSize: 9,
+            outlineColor: Cesium.Color.WHITE.withAlpha(0.7),
+            outlineWidth: 1.5,
+            scaleByDistance: new Cesium.NearFarScalar(5e5, 2.0, 1e7, 0.7),
+            id: f,
           });
-          viewer.scene.primitives.add(col);
-          povertyPointsRef.current = col;
-        }
-        povertyPointsRef.current.show = true;
-      } else if (povertyPointsRef.current) {
-        povertyPointsRef.current.show = false;
+        });
+        viewer.scene.primitives.add(col);
+        povertyPointsRef.current = col;
       }
 
-      if (conflictDataChanged && conflictPointsRef.current) {
+      if (conflictPointsRef.current) {
         viewer.scene.primitives.remove(conflictPointsRef.current);
         conflictPointsRef.current = null;
       }
       if (state.layers.conflict.enabled && state.conflictEvents.length > 0) {
-        if (!conflictPointsRef.current) {
-          const col = new Cesium.PointPrimitiveCollection();
-          state.conflictEvents.forEach((ev) => {
-            col.add({
-              position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat, 20000),
-              color: conflictColor(ev.fatalities).withAlpha(state.layers.conflict.opacity),
-              pixelSize: 12,
-              outlineColor: Cesium.Color.WHITE.withAlpha(0.6),
-              outlineWidth: 1,
-              scaleByDistance: new Cesium.NearFarScalar(5e5, 2.5, 1e7, 0.8),
-            });
+        const col = new Cesium.PointPrimitiveCollection();
+        state.conflictEvents.forEach((ev) => {
+          col.add({
+            position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat, 20000),
+            color: conflictColor(ev.fatalities).withAlpha(state.layers.conflict.opacity),
+            pixelSize: 12,
+            outlineColor: Cesium.Color.WHITE.withAlpha(0.6),
+            outlineWidth: 1,
+            scaleByDistance: new Cesium.NearFarScalar(5e5, 2.5, 1e7, 0.8),
           });
-          viewer.scene.primitives.add(col);
-          conflictPointsRef.current = col;
-        }
-        conflictPointsRef.current.show = true;
-      } else if (conflictPointsRef.current) {
-        conflictPointsRef.current.show = false;
+        });
+        viewer.scene.primitives.add(col);
+        conflictPointsRef.current = col;
       }
     }
 
     rebuild(useGlobeStore.getState());
-    const unsub = useGlobeStore.subscribe(rebuild);
+
+    const unsub = useGlobeStore.subscribe((state) => {
+      if (
+        state.povertyFeatures !== prevPoverty ||
+        state.conflictEvents  !== prevConflict ||
+        state.layers          !== prevLayers
+      ) {
+        prevPoverty  = state.povertyFeatures;
+        prevConflict = state.conflictEvents;
+        prevLayers   = state.layers;
+        rebuild(state);
+      }
+    });
+
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
