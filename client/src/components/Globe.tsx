@@ -149,8 +149,6 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.nightlights.enabled) {
       if (!nlLayerRef.current) {
-        // UrlTemplateImageryProvider replaces {z}/{y}/{x} = TileMatrix/TileRow/TileCol
-        // WebMapTileServiceImageryProvider does NOT replace {TileMatrixSet} in URL templates
         nlLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
             url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_SNPP_DayNightBand_ENCC/default/2023-01-01/500m/{z}/{y}/{x}.png",
@@ -159,6 +157,9 @@ export default function Globe({ onCountryClick }: Props) {
             credit: "NASA GSFC / GIBS",
           })
         );
+        // Make the dark background transparent so only city lights show through
+        nlLayerRef.current.colorToAlpha = new Cesium.Color(0.0, 0.0, 0.0, 1.0);
+        nlLayerRef.current.colorToAlphaThreshold = 0.1;
       }
       nlLayerRef.current.alpha = layers.nightlights.opacity;
       nlLayerRef.current.show  = true;
