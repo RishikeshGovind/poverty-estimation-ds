@@ -79,6 +79,10 @@ interface GlobeStore {
   setSelectedSatellite: (s: SatelliteInfo | null) => void;
   satEpochMs: number;
   setSatEpochMs: (ms: number) => void;
+
+  // Selected conflict event popup
+  selectedConflict: ConflictEvent | null;
+  setSelectedConflict: (e: ConflictEvent | null) => void;
 }
 
 const DEFAULT_LAYERS: Record<LayerId, LayerState> = {
@@ -133,4 +137,7 @@ export const useGlobeStore = create<GlobeStore>((set) => ({
   setSelectedSatellite: (selectedSatellite) => set({ selectedSatellite }),
   satEpochMs: 0,
   setSatEpochMs: (satEpochMs) => set({ satEpochMs }),
+
+  selectedConflict: null,
+  setSelectedConflict: (selectedConflict) => set({ selectedConflict }),
 }));

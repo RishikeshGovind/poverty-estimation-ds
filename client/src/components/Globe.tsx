@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import { useGlobeStore } from "../store/globeStore";
-import type { PovertyFeature } from "../store/globeStore";
+import type { PovertyFeature, ConflictEvent } from "../store/globeStore";
 import { SAT_ORBITS, orbitXYZ, MU, R_EARTH } from "../utils/orbitPropagator";
 import type { SatelliteInfo } from "../utils/orbitPropagator";
 
@@ -99,16 +99,25 @@ export default function Globe({ onCountryClick }: Props) {
       const store  = useGlobeStore.getState();
 
       if (!Cesium.defined(picked) || !picked.id) {
-        // Clicked empty space — dismiss all popups
+        store.setSelected(null);
+        store.setSelectedSatellite(null);
+        store.setSelectedConflict(null);
+        return;
+      }
+
+      // ConflictEvent points have .event_type string
+      if (typeof (picked.id as ConflictEvent).event_type === "string") {
+        store.setSelectedConflict(picked.id as ConflictEvent);
         store.setSelected(null);
         store.setSelectedSatellite(null);
         return;
       }
 
-      // PointPrimitive ids are PovertyFeature objects (have .iso3 string)
+      // PovertyFeature points have .iso3 string
       if (typeof (picked.id as PovertyFeature).iso3 === "string") {
         onCountryClick(picked.id as PovertyFeature);
         store.setSelectedSatellite(null);
+        store.setSelectedConflict(null);
         return;
       }
 
@@ -120,6 +129,7 @@ export default function Globe({ onCountryClick }: Props) {
         store.setSelectedSatellite(satInfoRef.current.get(entityId)!);
         store.setSatEpochMs(satEpochMsRef.current);
         store.setSelected(null);
+        store.setSelectedConflict(null);
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -305,6 +315,7 @@ export default function Globe({ onCountryClick }: Props) {
             outlineColor: Cesium.Color.WHITE.withAlpha(0.6),
             outlineWidth: 1,
             scaleByDistance: new Cesium.NearFarScalar(5e5, 2.5, 1e7, 0.8),
+            id: ev,
           });
         });
         viewer.scene.primitives.add(col);
