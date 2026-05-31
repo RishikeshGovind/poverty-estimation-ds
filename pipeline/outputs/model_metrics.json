@@ -1,16 +1,18 @@
 {
-  "r2": 0.7644,
-  "rmse": 0.4117,
-  "mae": 0.3157,
+  "r2": 0.7764,
+  "rmse": 0.4011,
+  "mae": 0.3057,
   "n_train": 2439,
   "n_val": 609,
   "feature_importances": {
-    "ntl_2023": 0.0,
-    "ntl_trend": 0.0001,
-    "ndvi_2023": 0.001,
-    "ndbi_2023": 0.0004,
-    "is_urban": 0.5097,
-    "latitude": 0.2413,
-    "longitude": 0.2476
+    "ntl_mean": 0.0955,
+    "ntl_std": 0.0354,
+    "ntl_max": 0.0814,
+    "s2_exgreen": 0.0379,
+    "s2_brightness": 0.0417,
+    "ntl_trend": 0.0012,
+    "is_urban": 0.4828,
+    "latitude": 0.1557,
+    "longitude": 0.0685
   }
 }
