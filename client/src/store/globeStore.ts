@@ -87,7 +87,7 @@ const DEFAULT_LAYERS: Record<LayerId, LayerState> = {
   settlements:    { enabled: false, opacity: 0.70 },
   poverty:        { enabled: true,  opacity: 0.80 },
   infrastructure: { enabled: false, opacity: 0.90 },
-  conflict:       { enabled: true,  opacity: 1.00 },
+  conflict:       { enabled: false, opacity: 1.00 },
   water:          { enabled: false, opacity: 0.70 },
 };
 

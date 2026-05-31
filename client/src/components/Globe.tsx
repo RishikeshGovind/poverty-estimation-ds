@@ -262,11 +262,23 @@ export default function Globe({ onCountryClick }: Props) {
 
   // ── Poverty + conflict point primitives ───────────────────────────────────
   useEffect(() => {
+    let prevPovertyFeatures = useGlobeStore.getState().povertyFeatures;
+    let prevConflictEvents  = useGlobeStore.getState().conflictEvents;
+
     function rebuild(state: ReturnType<typeof useGlobeStore.getState>) {
       const viewer = viewerRef.current;
       if (!viewer) return;
 
-      // Poverty dots — toggle show/hide to avoid remove+recreate on every change
+      // Recreate when data changes; show/hide when only the toggle changes.
+      const povertyDataChanged = state.povertyFeatures !== prevPovertyFeatures;
+      const conflictDataChanged = state.conflictEvents !== prevConflictEvents;
+      prevPovertyFeatures = state.povertyFeatures;
+      prevConflictEvents  = state.conflictEvents;
+
+      if (povertyDataChanged && povertyPointsRef.current) {
+        viewer.scene.primitives.remove(povertyPointsRef.current);
+        povertyPointsRef.current = null;
+      }
       if (state.layers.poverty.enabled && state.povertyFeatures.length > 0) {
         if (!povertyPointsRef.current) {
           const col = new Cesium.PointPrimitiveCollection();
@@ -289,7 +301,10 @@ export default function Globe({ onCountryClick }: Props) {
         povertyPointsRef.current.show = false;
       }
 
-      // Conflict dots — recreate when data changes, toggle show when layer toggled
+      if (conflictDataChanged && conflictPointsRef.current) {
+        viewer.scene.primitives.remove(conflictPointsRef.current);
+        conflictPointsRef.current = null;
+      }
       if (state.layers.conflict.enabled && state.conflictEvents.length > 0) {
         if (!conflictPointsRef.current) {
           const col = new Cesium.PointPrimitiveCollection();
@@ -312,8 +327,6 @@ export default function Globe({ onCountryClick }: Props) {
       }
     }
 
-    // Run once on mount then subscribe — avoids useEffect dep-array timing races
-    // where viewerRef.current may not be set when async data arrives.
     rebuild(useGlobeStore.getState());
     const unsub = useGlobeStore.subscribe(rebuild);
     return unsub;
