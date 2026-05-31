@@ -69,21 +69,16 @@ export default function Globe({ onCountryClick }: Props) {
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0a1628");
     viewer.scene.backgroundColor = Cesium.Color.BLACK;
 
-    // NASA Blue Marble via GIBS KVP endpoint — cloud-free composite, real land/ocean colours.
-    // KVP format avoids the {z}/{y}/{x} tile-coordinate ambiguity of the REST URL.
+    // EOX S2Cloudless 2021 — real Sentinel-2 satellite imagery, cloud-free annual composite.
+    // Standard XYZ/WebMercator tiles: no projection mismatch, loads identically to CartoDB.
     viewer.imageryLayers.addImageryProvider(
-      new Cesium.WebMapTileServiceImageryProvider({
-        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=BlueMarble_ShadedRelief_Bathymetry&STYLE=default&TILEMATRIXSET=500m&FORMAT=image%2Fjpeg&TILEMATRIX={TileMatrix}&TILEROW={TileRow}&TILECOL={TileCol}",
-        layer: "BlueMarble_ShadedRelief_Bathymetry",
-        style: "default",
-        format: "image/jpeg",
-        tileMatrixSetID: "500m",
-        maximumLevel: 8,
-        tilingScheme: new Cesium.GeographicTilingScheme(),
-        credit: "NASA / Blue Marble, GIBS",
+      new Cesium.UrlTemplateImageryProvider({
+        url: "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/g/{z}/{y}/{x}.jpg",
+        credit: "EOX IT Services — Sentinel-2 cloudless 2021",
+        maximumLevel: 14,
       })
     );
-    // Subtle dark overlay so data points remain legible over the bright imagery
+    // Dark overlay to keep dashboard contrast for data points
     viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
@@ -91,7 +86,7 @@ export default function Globe({ onCountryClick }: Props) {
         maximumLevel: 19,
       })
     );
-    viewer.imageryLayers.get(1).alpha = 0.35;
+    viewer.imageryLayers.get(1).alpha = 0.4;
 
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(20, 5, 12_000_000),
