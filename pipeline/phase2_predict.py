@@ -25,12 +25,18 @@ import json
 import math
 import joblib
 import numpy as np
+import pandas as pd
 from pathlib import Path
 
 PIPELINE    = Path(__file__).parent
-SAT_JSON    = PIPELINE / "outputs" / "satellite_features.json"
-MODEL_PATH  = PIPELINE / "outputs" / "sat_model.joblib"
-GEOJSON_OUT = Path("client/public/predictions.geojson")
+SAT_JSON     = PIPELINE / "outputs" / "satellite_features.json"
+MODEL_PATH   = PIPELINE / "outputs" / "sat_model.joblib"
+TRAIN_CSV    = PIPELINE / "outputs" / "training_with_satellite.csv"
+GEOJSON_OUT  = Path("client/public/predictions.geojson")
+
+# Countries with real DHS cluster data — use actual cluster locations + model predictions.
+# All other countries get synthetic urban/rural grid points.
+DHS_COUNTRIES = {"KEN": "Kenya", "NGA": "Nigeria"}
 
 COUNTRY_CENTROIDS = {
     "NGA": ("Nigeria",        9.08,   8.68),
@@ -114,6 +120,46 @@ def wi_to_poverty(wi: float) -> float:
     return max(0.0, min(100.0, 50.0 - wi * 25.0))
 
 
+def predict_dhs_clusters(model, scaler, features: list[str], sat: dict) -> list[dict]:
+    """Run model on all real DHS clusters for Kenya + Nigeria."""
+    if not TRAIN_CSV.exists():
+        print(f"[predict] {TRAIN_CSV} not found — skipping DHS cluster predictions")
+        return []
+
+    df = pd.read_csv(TRAIN_CSV).dropna(subset=features)
+    X  = scaler.transform(df[features].values.astype(np.float32))
+    wi = model.predict(X)
+
+    geo = []
+    for (_, row), w in zip(df.iterrows(), wi):
+        iso3 = {"Kenya": "KEN", "Nigeria": "NGA"}.get(row["country"], "")
+        sat_feats = sat.get(iso3, {})
+        ntl  = sat_feats.get("ntl",  {})
+        ndvi = sat_feats.get("ndvi", {})
+        ndbi = sat_feats.get("ndbi", {})
+        w = float(w)
+        geo.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [round(row["longitude"], 5),
+                                                           round(row["latitude"],  5)]},
+            "properties": {
+                "country":         row["country"],
+                "iso3":            iso3,
+                "wealth_index":    round(w, 4),
+                "poverty_rate":    round(wi_to_poverty(w), 1),
+                "urban_rural":     "Urban" if row["is_urban"] == 1 else "Rural",
+                "adm1_name":       str(row.get("ADM1NAME", "")),
+                "composite_score": round(max(0, min(100, (w + 2) / 4 * 100)), 1),
+                "ntl_latest":      float(ntl.get("2023",  ntl.get("2022",  0))),
+                "ntl_trend":       round(ntl_trend(ntl), 6),
+                "ndvi_latest":     float(ndvi.get("2023", ndvi.get("2022", 0))),
+                "ndbi_latest":     float(ndbi.get("2023", ndbi.get("2022", 0))),
+            },
+        })
+    print(f"[predict] {len(geo)} real DHS cluster predictions (Kenya + Nigeria)")
+    return geo
+
+
 def main():
     print("[predict] Loading model…")
     bundle = joblib.load(MODEL_PATH)
@@ -122,16 +168,19 @@ def main():
 
     sat = json.load(open(SAT_JSON))
 
-    X_rows, meta = [], []
+    # Step 1: Real DHS cluster predictions for Kenya + Nigeria
+    geo_features = predict_dhs_clusters(model, scaler, features, sat)
 
+    # Step 2: Synthetic points for the other 28 countries
+    X_rows, meta = [], []
     for iso3, (country, clat, clon) in COUNTRY_CENTROIDS.items():
+        if iso3 in DHS_COUNTRIES:
+            continue   # already handled above with real clusters
         sat_feats = sat.get(iso3, {})
 
-        # Urban point at the centroid
         X_rows.append(make_features(sat_feats, clat, clon, 1))
         meta.append((country, iso3, clat, clon, "Urban"))
 
-        # Rural points scattered within ±2°
         for _ in range(N_RURAL):
             lat = clat + RNG.uniform(-2.0, 2.0)
             lon = clon + RNG.uniform(-2.0, 2.0)
@@ -140,33 +189,29 @@ def main():
 
     X = scaler.transform(np.array(X_rows, dtype=np.float32))
     preds = model.predict(X)
+    print(f"[predict] {len(preds)} synthetic predictions across {len(COUNTRY_CENTROIDS) - len(DHS_COUNTRIES)} other countries")
 
-    print(f"[predict] {len(preds)} predictions across {len(COUNTRY_CENTROIDS)} countries")
-
-    geo_features = []
     for (country, iso3, lat, lon, ur), wi in zip(meta, preds):
         wi  = float(wi)
         sat_feats = sat.get(iso3, {})
-        ntl = sat_feats.get("ntl",  {})
+        ntl  = sat_feats.get("ntl",  {})
         ndvi = sat_feats.get("ndvi", {})
         ndbi = sat_feats.get("ndbi", {})
-
         geo_features.append({
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": [round(lon, 5), round(lat, 5)]},
             "properties": {
-                "country":      country,
-                "iso3":         iso3,
-                "wealth_index": round(wi, 4),
-                "poverty_rate": round(wi_to_poverty(wi), 1),
-                "urban_rural":  ur,
-                "adm1_name":    "",
+                "country":         country,
+                "iso3":            iso3,
+                "wealth_index":    round(wi, 4),
+                "poverty_rate":    round(wi_to_poverty(wi), 1),
+                "urban_rural":     ur,
+                "adm1_name":       "",
                 "composite_score": round(max(0, min(100, (wi + 2) / 4 * 100)), 1),
-                # Raw satellite values for the Phase 4 dashboard panel
-                "ntl_latest":  float(ntl.get("2023",  ntl.get("2022",  0))),
-                "ntl_trend":   round(ntl_trend(ntl), 6),
-                "ndvi_latest": float(ndvi.get("2023", ndvi.get("2022", 0))),
-                "ndbi_latest": float(ndbi.get("2023", ndbi.get("2022", 0))),
+                "ntl_latest":      float(ntl.get("2023",  ntl.get("2022",  0))),
+                "ntl_trend":       round(ntl_trend(ntl), 6),
+                "ndvi_latest":     float(ndvi.get("2023", ndvi.get("2022", 0))),
+                "ndbi_latest":     float(ndbi.get("2023", ndbi.get("2022", 0))),
             },
         })
 
