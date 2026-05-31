@@ -66,11 +66,20 @@ export default function Globe({ onCountryClick }: Props) {
     });
 
     viewer.imageryLayers.removeAll();
-    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#05080f");
+    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0a1628");
     viewer.scene.backgroundColor = Cesium.Color.BLACK;
 
-    // CartoDB Dark Matter — clean dark base, no clouds, no satellite scan-line artefacts.
-    // Shows coastlines and continent shapes in subtle dark grey; data layers go on top.
+    // NASA Blue Marble (GIBS) — cloud-free composite, real land/ocean colours.
+    // {z}/{y}/{x} maps to WMTS TileMatrix/TileRow/TileCol in geographic scheme.
+    viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/2004-08-01/500m/{z}/{y}/{x}.jpg",
+        tilingScheme: new Cesium.GeographicTilingScheme(),
+        maximumLevel: 8,
+        credit: "NASA / Blue Marble, GIBS",
+      })
+    );
+    // Subtle dark overlay so data points remain legible over the bright imagery
     viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
@@ -78,6 +87,7 @@ export default function Globe({ onCountryClick }: Props) {
         maximumLevel: 19,
       })
     );
+    viewer.imageryLayers.get(1).alpha = 0.35;
 
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(20, 5, 12_000_000),
