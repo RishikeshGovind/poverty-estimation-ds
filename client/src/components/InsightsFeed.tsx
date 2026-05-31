@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Minus, MapPin } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, MapPin, Info } from "lucide-react";
 import { useGlobeStore } from "../store/globeStore";
 import type { PovertyFeature } from "../store/globeStore";
 
@@ -67,6 +67,36 @@ function InsightCard({ f, rank }: { f: PovertyFeature; rank: number }) {
   );
 }
 
+const DHS_COUNTRIES = [
+  { name: "Nigeria",  lat:  9.08, lon:  8.68, zoom: 1_800_000 },
+  { name: "Kenya",    lat: -0.02, lon: 37.91, zoom: 1_800_000 },
+];
+
+function DataCoverageNote() {
+  const { setFlyTo } = useGlobeStore();
+  return (
+    <div className="mx-3 my-2 rounded border border-amber-500/30 bg-amber-500/5 p-2.5">
+      <div className="flex items-start gap-1.5 mb-2">
+        <Info size={11} className="text-amber-400 shrink-0 mt-0.5" />
+        <p className="text-[10px] text-amber-300 leading-relaxed">
+          Cluster-level survey data currently available for <span className="font-semibold">2 countries</span> only (DHS 2022–23). All other countries show World Bank national estimates.
+        </p>
+      </div>
+      <div className="flex gap-1.5 pl-4">
+        {DHS_COUNTRIES.map((c) => (
+          <button
+            key={c.name}
+            onClick={() => setFlyTo([c.lat, c.lon, c.zoom])}
+            className="flex items-center gap-1 text-[10px] font-mono text-amber-400 hover:text-amber-200 border border-amber-500/30 hover:border-amber-400/60 rounded px-2 py-1 transition-colors"
+          >
+            <MapPin size={9} /> {c.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function InsightsFeed() {
   const { povertyFeatures } = useGlobeStore();
 
@@ -97,6 +127,8 @@ export default function InsightsFeed() {
         </p>
         <p className="text-[9px] text-slate-500 mt-0.5">Ranked by poverty severity</p>
       </div>
+
+      <DataCoverageNote />
 
       <div className="flex-1 overflow-y-auto">
         {sorted.length === 0 ? (
