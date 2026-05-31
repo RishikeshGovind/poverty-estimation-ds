@@ -69,13 +69,17 @@ export default function Globe({ onCountryClick }: Props) {
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0a1628");
     viewer.scene.backgroundColor = Cesium.Color.BLACK;
 
-    // NASA Blue Marble (GIBS) — cloud-free composite, real land/ocean colours.
-    // {z}/{y}/{x} maps to WMTS TileMatrix/TileRow/TileCol in geographic scheme.
+    // NASA Blue Marble via GIBS KVP endpoint — cloud-free composite, real land/ocean colours.
+    // KVP format avoids the {z}/{y}/{x} tile-coordinate ambiguity of the REST URL.
     viewer.imageryLayers.addImageryProvider(
-      new Cesium.UrlTemplateImageryProvider({
-        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/2004-08-01/500m/{z}/{y}/{x}.jpg",
-        tilingScheme: new Cesium.GeographicTilingScheme(),
+      new Cesium.WebMapTileServiceImageryProvider({
+        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/wmts.cgi?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=BlueMarble_ShadedRelief_Bathymetry&STYLE=default&TILEMATRIXSET=500m&FORMAT=image%2Fjpeg&TILEMATRIX={TileMatrix}&TILEROW={TileRow}&TILECOL={TileCol}",
+        layer: "BlueMarble_ShadedRelief_Bathymetry",
+        style: "default",
+        format: "image/jpeg",
+        tileMatrixSetID: "500m",
         maximumLevel: 8,
+        tilingScheme: new Cesium.GeographicTilingScheme(),
         credit: "NASA / Blue Marble, GIBS",
       })
     );
