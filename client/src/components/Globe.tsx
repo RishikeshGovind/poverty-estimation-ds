@@ -149,16 +149,15 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.nightlights.enabled) {
       if (!nlLayerRef.current) {
-        // NASA Black Marble "City Lights 2012" — true black background, bright city lights only.
-        // Served in WebMercator XYZ so no geographic projection mismatch.
         nlLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
-            url: "https://map1.vis.earthdata.nasa.gov/wmts-webmercator/1.0.0/VIIRS_CityLights_2012/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg",
+            // NASA GIBS VIIRS CityLights — static product (no time param), WebMercator.
+            // URL confirmed 200 OK. {z}/{y}/{x} = TileMatrix/TileRow/TileCol per GIBS WMTS spec.
+            url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_CityLights_2012/default/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg",
             maximumLevel: 8,
-            credit: "NASA / Black Marble",
+            credit: "NASA / VIIRS City Lights",
           })
         );
-        // True black background → transparent; only city lights remain visible
         nlLayerRef.current.colorToAlpha = new Cesium.Color(0.0, 0.0, 0.0, 1.0);
         nlLayerRef.current.colorToAlphaThreshold = 0.05;
       }
@@ -175,12 +174,18 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.ndvi.enabled) {
       if (!ndviLayerRef.current) {
+        // GIBS EPSG:4326 250m tiles are 512×512px — must set tileWidth/tileHeight or Cesium
+        // requests wrong tile coordinates and gets 404s for half the grid positions.
         ndviLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
-            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_NDVI_8Day/default/2023-06-01/250m/{z}/{y}/{x}.png",
+            // Date must be within GIBS retention window (starts 2025-02-12 for this product).
+            // 2023-06-01 was outside the window and returned 404 for every tile.
+            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_NDVI_8Day/default/2026-05-01/250m/{z}/{y}/{x}.png",
             tilingScheme: new Cesium.GeographicTilingScheme(),
+            tileWidth: 512,
+            tileHeight: 512,
             maximumLevel: 8,
-            credit: "NASA GSFC / GIBS",
+            credit: "NASA GSFC / GIBS — MODIS Terra NDVI",
           })
         );
       }
@@ -197,11 +202,13 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.settlements.enabled) {
       if (!settlementsLayerRef.current) {
-        // dark_matter gives visible white urban outlines over satellite imagery
+        // CartoDB Positron (light) contrasts with the dark satellite base — urban areas
+        // appear white/grey showing the street+building footprint (settlement density proxy).
+        // The previous dark_matter_nolabels was identical to the base overlay and invisible.
         settlementsLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
-            url: "https://basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}.png",
-            credit: "© CartoDB",
+            url: "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
+            credit: "© CartoDB Positron",
             maximumLevel: 19,
           })
         );
@@ -240,12 +247,17 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.water.enabled) {
       if (!waterLayerRef.current) {
-        // CartoDB Voyager shows rivers, lakes and ocean in blue — JRC bucket URL is dead/CORS
+        // MODIS Water Mask (GIBS EPSG:4326, 250m, 512×512 tiles) — static product, URL 200 OK.
+        // JRC_Global_Surface_Water_Recurrence is not served in the GIBS EPSG:4326 endpoint.
+        // Previous CartoDB Voyager nolabels was nearly indistinguishable from the base overlay.
         waterLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
-            url: "https://basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
-            credit: "© CartoDB",
-            maximumLevel: 19,
+            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Water_Mask/default/2019-01-01/250m/{z}/{y}/{x}.png",
+            tilingScheme: new Cesium.GeographicTilingScheme(),
+            tileWidth: 512,
+            tileHeight: 512,
+            maximumLevel: 8,
+            credit: "NASA GSFC / GIBS — MODIS Water Mask",
           })
         );
       }
