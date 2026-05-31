@@ -270,8 +270,10 @@ export default function Globe({ onCountryClick }: Props) {
           col.add({
             position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 20000),
             color: povertyColor(f.poverty_rate, state.layers.poverty.opacity),
-            pixelSize: 5,
-            scaleByDistance: new Cesium.NearFarScalar(8e5, 1.8, 8e6, 0.4),
+            pixelSize: 9,
+            outlineColor: Cesium.Color.WHITE.withAlpha(0.7),
+            outlineWidth: 1.5,
+            scaleByDistance: new Cesium.NearFarScalar(5e5, 2.0, 1e7, 0.7),
             id: f,
           });
         });
