@@ -25,9 +25,9 @@ GEE_PROJECT = os.environ.get("GEE_PROJECT", "")   # e.g. "ee-yourname"
 SSA_COUNTRIES = [
     {"iso3": "NGA", "name": "Nigeria",       "gee_name": "Nigeria"},
     {"iso3": "ETH", "name": "Ethiopia",      "gee_name": "Ethiopia"},
-    {"iso3": "COD", "name": "DR Congo",      "gee_name": "Congo, Democratic Republic of the"},
+    {"iso3": "COD", "name": "DR Congo",      "gee_name": "Democratic Republic of the Congo"},
     {"iso3": "KEN", "name": "Kenya",         "gee_name": "Kenya"},
-    {"iso3": "TZA", "name": "Tanzania",      "gee_name": "United Republic of Tanzania"},
+    {"iso3": "TZA", "name": "Tanzania",      "gee_name": "Tanzania"},
     {"iso3": "MOZ", "name": "Mozambique",    "gee_name": "Mozambique"},
     {"iso3": "GHA", "name": "Ghana",         "gee_name": "Ghana"},
     {"iso3": "UGA", "name": "Uganda",        "gee_name": "Uganda"},

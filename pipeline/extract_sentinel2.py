@@ -1,25 +1,15 @@
 """
-Task 3 — Extract Sentinel-2 NDVI and NDBI per SSA country.
+Task 3 — Extract MODIS NDVI and Landsat NDBI per SSA country.
 
-Source : COPERNICUS/S2_SR_HARMONIZED  (Google Earth Engine)
-Bands  : B4 (Red), B8 (NIR), B11 (SWIR)
-Indices:
-  NDVI = (B8 - B4) / (B8 + B4)   → vegetation health [−1, 1]
-  NDBI = (B11 - B8) / (B11 + B8) → built-up / urban index [−1, 1]
-Output : pipeline/outputs/sentinel2_ndvi_ndbi.json
+Switched from Sentinel-2 to MODIS for NDVI: MODIS MOD13A3 is a pre-built
+monthly 1km composite — no per-scene cloud masking needed, no memory issues.
+NDBI uses Landsat (has SWIR band; MODIS NDBI is unreliable at 500m).
 
-Schema:
-  {
-    "NGA": {
-      "ndvi": {"2019": 0.42, "2020": 0.40, ...},
-      "ndbi": {"2019": −0.08, "2020": −0.09, ...}
-    },
-    ...
-  }
+Sources:
+  NDVI : MODIS/061/MOD13A3  — monthly 1km NDVI composites, band "_1_km_monthly_NDVI"
+  NDBI : LANDSAT/LC08/C02/T1_L2 + LANDSAT/LC09/C02/T1_L2 — band SR_B6 (SWIR), SR_B5 (NIR)
 
-Usage:
-    python pipeline/extract_sentinel2.py
-    python pipeline/extract_sentinel2.py --years 2022 2023
+Output : pipeline/outputs/sentinel2_ndvi_ndbi.json  (kept same filename for merge compat)
 """
 
 import argparse
@@ -28,10 +18,10 @@ import time
 
 import ee
 
-from config import (
-    GEE_PROJECT, GEE_NAMES, ISO3_BY_GEE_NAME,
-    SENTINEL_YEARS, SCALE_SENTINEL, MAX_CLOUD_PCT, SENTINEL_OUT,
-)
+from config import GEE_PROJECT, SENTINEL_YEARS, SENTINEL_OUT, SSA_COUNTRIES
+
+_LS_SCALE  = 0.0000275
+_LS_OFFSET = -0.2
 
 
 def init_gee():
@@ -43,98 +33,95 @@ def init_gee():
         ee.Initialize(project=GEE_PROJECT or None)
 
 
-def mask_s2_clouds(image: ee.Image) -> ee.Image:
-    """Use Sentinel-2 Scene Classification Layer (SCL) to mask clouds and shadows."""
-    scl = image.select("SCL")
-    # SCL values: 3=cloud shadow, 8=cloud medium, 9=cloud high, 10=thin cirrus
-    cloud_mask = scl.neq(3).And(scl.neq(8)).And(scl.neq(9)).And(scl.neq(10))
-    return image.updateMask(cloud_mask)
+def get_geom(gee_name: str) -> ee.Geometry:
+    fc = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017")
+    return fc.filter(ee.Filter.eq("country_na", gee_name)).first().geometry()
 
 
-def add_indices(image: ee.Image) -> ee.Image:
-    """Add NDVI and NDBI bands. Sentinel-2 reflectance is scaled by 10000."""
-    nir  = image.select("B8").toFloat()
-    red  = image.select("B4").toFloat()
-    swir = image.select("B11").toFloat()
-
-    ndvi = nir.subtract(red).divide(nir.add(red)).rename("NDVI")
-    ndbi = swir.subtract(nir).divide(swir.add(nir)).rename("NDBI")
-
-    return image.addBands([ndvi, ndbi])
-
-
-def get_country_fc():
-    all_countries = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017")
-    return all_countries.filter(ee.Filter.inList("country_na", GEE_NAMES))
-
-
-def extract_annual_indices(year: int, country_fc: ee.FeatureCollection) -> dict:
-    """
-    Compute median annual NDVI and NDBI per country, cloud-filtered.
-    Returns {iso3: {"ndvi": float, "ndbi": float}}.
-    """
-    collection = (
-        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+def extract_modis_ndvi(geom: ee.Geometry, year: int) -> float | None:
+    """MODIS MOD13A3 monthly 1km NDVI — pre-built composite, very memory-efficient."""
+    col = (
+        ee.ImageCollection("MODIS/061/MOD13A3")
         .filterDate(f"{year}-01-01", f"{year}-12-31")
-        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", MAX_CLOUD_PCT))
-        .map(mask_s2_clouds)
-        .map(add_indices)
-        .select(["NDVI", "NDBI"])
+        .filterBounds(geom)
+        .select("NDVI")
     )
-
-    if collection.size().getInfo() == 0:
-        print(f"  [warn] No S2 data for {year} — skipping")
-        return {}
-
-    # Median composite reduces cloud/shadow residuals
-    composite = collection.median()
-
-    stats = composite.reduceRegions(
-        collection=country_fc,
+    composite = col.mean()   # annual mean of monthly composites
+    stats = composite.reduceRegion(
         reducer=ee.Reducer.mean(),
-        scale=SCALE_SENTINEL,
+        geometry=geom,
+        scale=1000,
+        maxPixels=1e8,
+        bestEffort=True,
     )
+    val = stats.getInfo().get("NDVI")
+    if val is None:
+        return None
+    return round(float(val) * 0.0001, 4)   # MOD13A3 scale factor
 
-    features  = stats.getInfo().get("features", [])
-    result    = {}
-    for feat in features:
-        props    = feat.get("properties", {})
-        gee_name = props.get("country_na", "")
-        iso3     = ISO3_BY_GEE_NAME.get(gee_name)
-        ndvi_val = props.get("NDVI")
-        ndbi_val = props.get("NDBI")
-        if iso3 and ndvi_val is not None and ndbi_val is not None:
-            result[iso3] = {
-                "ndvi": round(float(ndvi_val), 4),
-                "ndbi": round(float(ndbi_val), 4),
-            }
 
-    return result
+def mask_ls_clouds(image: ee.Image) -> ee.Image:
+    qa = image.select("QA_PIXEL")
+    clear = qa.bitwiseAnd(1 << 5).eq(0).And(qa.bitwiseAnd(1 << 3).eq(0))
+    return image.updateMask(clear)
+
+
+def extract_landsat_ndbi(geom: ee.Geometry, year: int) -> float | None:
+    """Landsat NDBI = (SWIR - NIR) / (SWIR + NIR). Process one country at coarse scale."""
+    def apply_scale(img):
+        nir  = img.select("SR_B5").multiply(_LS_SCALE).add(_LS_OFFSET)
+        swir = img.select("SR_B6").multiply(_LS_SCALE).add(_LS_OFFSET)
+        return img.addBands(swir.subtract(nir).divide(swir.add(nir)).rename("NDBI"))
+
+    l8 = (ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+            .filterDate(f"{year}-01-01", f"{year}-12-31")
+            .filterBounds(geom)
+            .map(mask_ls_clouds).map(apply_scale).select("NDBI"))
+    l9 = (ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
+            .filterDate(f"{year}-01-01", f"{year}-12-31")
+            .filterBounds(geom)
+            .map(mask_ls_clouds).map(apply_scale).select("NDBI")) if year >= 2022 else ee.ImageCollection([])
+
+    col = l8.merge(l9)
+    composite = col.median()
+    stats = composite.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=geom,
+        scale=5000,
+        maxPixels=1e8,
+        bestEffort=True,
+    )
+    val = stats.getInfo().get("NDBI")
+    return round(float(val), 4) if val is not None else None
 
 
 def main(years: list[int]):
-    print("[sentinel2] Initialising GEE…")
+    print("[ndvi/ndbi] Initialising GEE…")
     init_gee()
 
-    print("[sentinel2] Loading country boundaries…")
-    country_fc = get_country_fc()
-
-    # Output structure: {iso3: {ndvi: {year: val}, ndbi: {year: val}}}
     output: dict[str, dict] = {}
+    total = len(SSA_COUNTRIES) * len(years)
+    done  = 0
 
-    for year in years:
-        print(f"[sentinel2] Extracting {year}…", end=" ", flush=True)
-        t0 = time.time()
-        try:
-            year_data = extract_annual_indices(year, country_fc)
-            elapsed   = time.time() - t0
-            print(f"got {len(year_data)} countries in {elapsed:.1f}s")
-            for iso3, vals in year_data.items():
+    for country in SSA_COUNTRIES:
+        iso3 = country["iso3"]
+        geom = get_geom(country["gee_name"])
+        for year in years:
+            done += 1
+            print(f"[ndvi/ndbi] ({done}/{total}) {iso3} {year}…", end=" ", flush=True)
+            t0 = time.time()
+            try:
+                ndvi = extract_modis_ndvi(geom, year)
+                ndbi = extract_landsat_ndbi(geom, year)
+                elapsed = time.time() - t0
                 entry = output.setdefault(iso3, {"ndvi": {}, "ndbi": {}})
-                entry["ndvi"][str(year)] = vals["ndvi"]
-                entry["ndbi"][str(year)] = vals["ndbi"]
-        except Exception as exc:
-            print(f"\n  [error] {year}: {exc}")
+                if ndvi is not None:
+                    entry["ndvi"][str(year)] = ndvi
+                if ndbi is not None:
+                    entry["ndbi"][str(year)] = ndbi
+                print(f"NDVI={ndvi} NDBI={ndbi} ({elapsed:.1f}s)")
+            except Exception as exc:
+                print(f"error: {exc}")
 
     SENTINEL_OUT.parent.mkdir(exist_ok=True)
     with open(SENTINEL_OUT, "w") as f:
