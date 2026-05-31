@@ -1,0 +1,16 @@
+{
+  "r2": 0.7644,
+  "rmse": 0.4117,
+  "mae": 0.3157,
+  "n_train": 2439,
+  "n_val": 609,
+  "feature_importances": {
+    "ntl_2023": 0.0,
+    "ntl_trend": 0.0001,
+    "ndvi_2023": 0.001,
+    "ndbi_2023": 0.0004,
+    "is_urban": 0.5097,
+    "latitude": 0.2413,
+    "longitude": 0.2476
+  }
+}
