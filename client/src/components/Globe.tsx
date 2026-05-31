@@ -174,18 +174,14 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.ndvi.enabled) {
       if (!ndviLayerRef.current) {
-        // GIBS EPSG:4326 250m tiles are 512×512px — must set tileWidth/tileHeight or Cesium
-        // requests wrong tile coordinates and gets 404s for half the grid positions.
+        // WebMercator (epsg3857) monthly NDVI — avoids GeographicTilingScheme tile-alignment
+        // issues that caused Australia's vegetation to appear over Africa.
+        // GoogleMapsCompatible_Level7 TileMatrixSet, confirmed 200 OK.
         ndviLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
-            // Date must be within GIBS retention window (starts 2025-02-12 for this product).
-            // 2023-06-01 was outside the window and returned 404 for every tile.
-            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_NDVI_8Day/default/2026-05-01/250m/{z}/{y}/{x}.png",
-            tilingScheme: new Cesium.GeographicTilingScheme(),
-            tileWidth: 512,
-            tileHeight: 512,
-            maximumLevel: 8,
-            credit: "NASA GSFC / GIBS — MODIS Terra NDVI",
+            url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_L3_NDVI_Monthly/default/2026-04-01/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png",
+            maximumLevel: 7,
+            credit: "NASA GSFC / GIBS — MODIS Terra NDVI Monthly",
           })
         );
       }
@@ -247,16 +243,12 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.water.enabled) {
       if (!waterLayerRef.current) {
-        // MODIS Water Mask (GIBS EPSG:4326, 250m, 512×512 tiles) — static product, URL 200 OK.
-        // JRC_Global_Surface_Water_Recurrence is not served in the GIBS EPSG:4326 endpoint.
-        // Previous CartoDB Voyager nolabels was nearly indistinguishable from the base overlay.
+        // MODIS Water Mask — WebMercator epsg3857, no time param (static product), confirmed 200 OK.
+        // Uses GoogleMapsCompatible_Level9 TileMatrixSet so no GeographicTilingScheme needed.
         waterLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
-            url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Water_Mask/default/2019-01-01/250m/{z}/{y}/{x}.png",
-            tilingScheme: new Cesium.GeographicTilingScheme(),
-            tileWidth: 512,
-            tileHeight: 512,
-            maximumLevel: 8,
+            url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Water_Mask/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png",
+            maximumLevel: 9,
             credit: "NASA GSFC / GIBS — MODIS Water Mask",
           })
         );
