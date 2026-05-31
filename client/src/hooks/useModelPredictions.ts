@@ -29,6 +29,9 @@ export function useModelPredictions() {
             properties: {
               country: string; wealth_index: number; composite_score: number;
               adm1_name?: string; region_name?: string; urban_rural?: string;
+              iso3?: string;
+              ntl_latest?: number; ntl_trend?: number;
+              ndvi_latest?: number; ndbi_latest?: number;
             };
           }) => {
             const [lon, lat] = f.geometry.coordinates;
@@ -36,16 +39,22 @@ export function useModelPredictions() {
             const poverty_rate = Math.max(0, Math.min(100, 50 - wi * 25));
             const adm1  = f.properties.adm1_name  ?? "";
             const urban = f.properties.urban_rural ?? "";
-            // Encode place info into iso3 — decoded by RegionPopup
-            const placeKey = `CLUSTER|${adm1}|${urban}`;
+            const iso3  = f.properties.iso3 ?? "";
+            // Encode place info into iso3 field — decoded by RegionPopup
+            const placeKey = adm1 ? `CLUSTER|${adm1}|${urban}` : `COUNTRY|${iso3}`;
             return {
-              country: f.properties.country,
-              iso3: placeKey,
+              country:     f.properties.country,
+              iso3:        placeKey,
               lat, lon, poverty_rate,
-              hdi: (wi + 2) / 4,
-              year: 2023,
-              ntl_trend: makeFlatTrend(Math.max(0, wi / 4 + 0.25)),
-              ndvi_trend: makeFlatTrend(0.5),
+              hdi:         (wi + 2) / 4,
+              year:        2023,
+              ntl_trend:   makeFlatTrend(Math.max(0, wi / 4 + 0.25)),
+              ndvi_trend:  makeFlatTrend(0.5),
+              // Real satellite signals embedded by phase2_predict.py
+              ntl_latest:  f.properties.ntl_latest,
+              ntl_yr_trend: f.properties.ntl_trend,
+              ndvi_latest: f.properties.ndvi_latest,
+              ndbi_latest: f.properties.ndbi_latest,
             };
           }
         );

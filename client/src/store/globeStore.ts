@@ -36,6 +36,11 @@ export interface PovertyFeature {
   year: number;
   ntl_trend: number[];
   ndvi_trend: number[];
+  // Real satellite signals (Phase 4)
+  ntl_latest?: number;   // VIIRS NTL radiance nW/cm²/sr
+  ntl_yr_trend?: number; // slope per year
+  ndvi_latest?: number;  // MODIS NDVI [0–1]
+  ndbi_latest?: number;  // Landsat NDBI [−1–1]
 }
 
 interface GlobeStore {
