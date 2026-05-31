@@ -24,14 +24,18 @@ export function useACLED(year: number) {
   const setConflictEvents = useGlobeStore((s) => s.setConflictEvents);
 
   useEffect(() => {
+    // Set demo data immediately so conflict dots are available before the
+    // Render.com backend wakes up (cold starts can take 30-60 s).
+    setConflictEvents(DEMO_EVENTS);
+
     async function load() {
       try {
         const res = await fetch(apiUrl(`/api/acled?year=${year}`));
         if (!res.ok) throw new Error("API unavailable");
         const data = await res.json();
-        setConflictEvents(data.events ?? DEMO_EVENTS);
+        if (data.events?.length > 0) setConflictEvents(data.events);
       } catch {
-        setConflictEvents(DEMO_EVENTS);
+        // demo data already set above
       }
     }
     load();
