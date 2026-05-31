@@ -65,6 +65,11 @@ export default function Globe({ onCountryClick }: Props) {
       scene3DOnly: true,
     });
 
+    // Render at native device pixel density — fixes pixelation on retina/HiDPI displays.
+    // Without this, Cesium renders at 1× CSS pixels; on a 2× DPR screen every pixel
+    // covers 4 physical pixels, producing a blurry 240p-style appearance.
+    viewer.resolutionScale = window.devicePixelRatio;
+
     viewer.imageryLayers.removeAll();
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0a1628");
     viewer.scene.backgroundColor = Cesium.Color.BLACK;
