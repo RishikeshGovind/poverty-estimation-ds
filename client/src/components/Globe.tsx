@@ -198,13 +198,13 @@ export default function Globe({ onCountryClick }: Props) {
     if (!viewer) return;
     if (layers.settlements.enabled) {
       if (!settlementsLayerRef.current) {
-        // CartoDB Positron (light) contrasts with the dark satellite base — urban areas
-        // appear white/grey showing the street+building footprint (settlement density proxy).
-        // The previous dark_matter_nolabels was identical to the base overlay and invisible.
+        // Esri World Street Map — road density is a strong proxy for settlement density.
+        // Urban cores show dense road grids; rural areas show sparse or no roads.
+        // Esri tile format: tile/{z}/{y}/{x} (row/col, same convention as GIBS WMTS). Confirmed 200 OK.
         settlementsLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
-            url: "https://a.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
-            credit: "© CartoDB Positron",
+            url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+            credit: "© Esri / OpenStreetMap contributors",
             maximumLevel: 19,
           })
         );
@@ -224,7 +224,7 @@ export default function Globe({ onCountryClick }: Props) {
       if (!infraLayerRef.current) {
         infraLayerRef.current = viewer.imageryLayers.addImageryProvider(
           new Cesium.UrlTemplateImageryProvider({
-            url: "https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+            url: "https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
             credit: "© OpenStreetMap contributors, HOT",
             maximumLevel: 18,
           })
