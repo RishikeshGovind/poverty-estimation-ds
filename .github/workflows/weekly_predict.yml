@@ -1,0 +1,70 @@
+name: Weekly Predictions Update
+
+# Runs every Monday at 02:00 UTC — regenerates predictions.geojson from the
+# committed satellite_features.json + trained model, then commits the result
+# so the dashboard always serves fresh data with zero manual effort.
+#
+# No GEE credentials needed: satellite_features.json is committed to the repo
+# (gitignored from pipeline/outputs but copied to data/ for CI use).
+# To also refresh satellite features, run the full Phase 1 pipeline locally.
+
+on:
+  schedule:
+    - cron: "0 2 * * 1"   # every Monday 02:00 UTC
+  workflow_dispatch:        # allow manual trigger from GitHub UI
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install numpy pandas scikit-learn joblib tqdm
+
+      - name: Restore satellite features for CI
+        # pipeline/outputs/ is gitignored so we keep a CI copy in data/ci/
+        # If that doesn't exist yet, the predict script falls back to defaults.
+        run: |
+          mkdir -p pipeline/outputs
+          if [ -f data/ci/satellite_features.json ]; then
+            cp data/ci/satellite_features.json pipeline/outputs/satellite_features.json
+            echo "Restored satellite_features.json from data/ci/"
+          else
+            echo "No CI satellite features found — predictions will use NTL=0 fallbacks"
+          fi
+
+      - name: Restore trained model for CI
+        run: |
+          if [ -f data/ci/sat_model.joblib ]; then
+            cp data/ci/sat_model.joblib pipeline/outputs/sat_model.joblib
+            echo "Restored sat_model.joblib from data/ci/"
+          else
+            echo "No CI model found — skipping predict step"
+            exit 0
+          fi
+
+      - name: Generate predictions.geojson
+        run: python -m pipeline.phase2_predict
+
+      - name: Commit updated predictions
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add client/public/predictions.geojson
+          if git diff --cached --quiet; then
+            echo "predictions.geojson unchanged — nothing to commit"
+          else
+            git commit -m "chore: refresh predictions.geojson [skip ci]"
+            git push
+          fi
