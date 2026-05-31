@@ -55,8 +55,8 @@ COUNTRY_CENTROIDS = {
     "HTI": ("Haiti",        18.97, -72.29),
 }
 
-N_URBAN  = 20   # sample points per country (urban)
-N_RURAL  = 40   # sample points per country (rural)
+N_URBAN  = 1    # one urban point per country (at centroid)
+N_RURAL  = 2    # two rural points per country (small scatter)
 RNG      = np.random.default_rng(42)
 
 
@@ -99,17 +99,14 @@ def main():
     for iso3, (country_name, clat, clon) in COUNTRY_CENTROIDS.items():
         feats = sat.get(iso3, {})
 
-        # Urban sample: tight cluster near centroid
-        for _ in range(N_URBAN):
-            lat = clat + RNG.normal(0, 0.3)
-            lon = clon + RNG.normal(0, 0.3)
-            features_list.append(make_features(iso3, feats, lat, lon, 1))
-            meta_list.append((country_name, iso3, lat, lon, "U"))
+        # One urban point at the centroid
+        features_list.append(make_features(iso3, feats, clat, clon, 1))
+        meta_list.append((country_name, iso3, clat, clon, "U"))
 
-        # Rural sample: spread across the country
+        # Two rural points with ±1.5° scatter
         for _ in range(N_RURAL):
-            lat = clat + RNG.uniform(-4, 4)
-            lon = clon + RNG.uniform(-4, 4)
+            lat = clat + RNG.uniform(-1.5, 1.5)
+            lon = clon + RNG.uniform(-1.5, 1.5)
             features_list.append(make_features(iso3, feats, lat, lon, 0))
             meta_list.append((country_name, iso3, lat, lon, "R"))
 
