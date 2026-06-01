@@ -238,10 +238,10 @@ export default function Globe({ onCountryClick }: Props) {
 
     if (!layers.settlements.enabled) return;
 
-    // CartoDB Positron light tiles — same CDN as the working dark basemap so
-    // CORS is guaranteed. Road-dense urban areas appear lighter against the
-    // dark satellite base, giving a clear settlement-density signal at all zoom
-    // levels without replacing the satellite imagery entirely.
+    // CartoDB Positron tiles with colorToAlpha strip the near-white background
+    // (land fill ≈ #f5f5f3), leaving only the darker road network visible as
+    // an overlay on the satellite base. Urban road density shows clearly at
+    // all zoom levels without washing out the underlying imagery.
     settlementsLayerRef.current = viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: "https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
@@ -249,6 +249,10 @@ export default function Globe({ onCountryClick }: Props) {
         maximumLevel: 19,
       })
     );
+    // Make the near-white background transparent; roads (~0.6–0.8 gray) are
+    // far enough from white that they stay visible.
+    settlementsLayerRef.current.colorToAlpha = new Cesium.Color(0.97, 0.97, 0.96, 1.0);
+    settlementsLayerRef.current.colorToAlphaThreshold = 0.18;
     settlementsLayerRef.current.alpha = layers.settlements.opacity;
   }, [layers.settlements]);
 
