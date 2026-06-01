@@ -238,21 +238,20 @@ export default function Globe({ onCountryClick }: Props) {
 
     if (!layers.settlements.enabled) return;
 
-    // CartoDB Positron tiles with colorToAlpha strip the near-white background
-    // (land fill ≈ #f5f5f3), leaving only the darker road network visible as
-    // an overlay on the satellite base. Urban road density shows clearly at
-    // all zoom levels without washing out the underlying imagery.
+    // CartoDB Voyager tiles — higher-contrast road rendering (orange highways,
+    // coloured arterials) than Positron. colorToAlpha(white, 0.08) strips only
+    // the pure/near-white land fill while leaving roads and urban patches
+    // intact; minor roads (gray ~0.87, distance ~0.23 from white) are well
+    // outside the threshold and stay visible.
     settlementsLayerRef.current = viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
-        url: "https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
+        url: "https://basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
         credit: "© CartoDB",
         maximumLevel: 19,
       })
     );
-    // Make the near-white background transparent; roads (~0.6–0.8 gray) are
-    // far enough from white that they stay visible.
-    settlementsLayerRef.current.colorToAlpha = new Cesium.Color(0.97, 0.97, 0.96, 1.0);
-    settlementsLayerRef.current.colorToAlphaThreshold = 0.18;
+    settlementsLayerRef.current.colorToAlpha = new Cesium.Color(1.0, 1.0, 1.0, 1.0);
+    settlementsLayerRef.current.colorToAlphaThreshold = 0.08;
     settlementsLayerRef.current.alpha = layers.settlements.opacity;
   }, [layers.settlements]);
 
