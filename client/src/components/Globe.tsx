@@ -44,6 +44,7 @@ export default function Globe({ onCountryClick }: Props) {
   const layers   = useGlobeStore((s) => s.layers);
   const flyTo    = useGlobeStore((s) => s.flyTo);
   const setFlyTo = useGlobeStore((s) => s.setFlyTo);
+  const year     = useGlobeStore((s) => s.year);
 
   // ── Init viewer once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -158,54 +159,58 @@ export default function Globe({ onCountryClick }: Props) {
     setFlyTo(null);
   }, [flyTo, setFlyTo]);
 
-  // ── Nighttime lights layer ────────────────────────────────────────────────
+  // ── Nighttime lights layer — year-responsive ──────────────────────────────
+  // GIBS VIIRS_Black_Marble only has two annual snapshots: 2012 and 2016.
+  // Years ≤ 2014 → 2012 composite; years ≥ 2015 → 2016 composite.
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
-    if (layers.nightlights.enabled) {
-      if (!nlLayerRef.current) {
-        nlLayerRef.current = viewer.imageryLayers.addImageryProvider(
-          new Cesium.UrlTemplateImageryProvider({
-            // NASA GIBS VIIRS CityLights — static product (no time param), WebMercator.
-            // URL confirmed 200 OK. {z}/{y}/{x} = TileMatrix/TileRow/TileCol per GIBS WMTS spec.
-            url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_CityLights_2012/default/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg",
-            maximumLevel: 8,
-            credit: "NASA / VIIRS City Lights",
-          })
-        );
-        nlLayerRef.current.colorToAlpha = new Cesium.Color(0.0, 0.0, 0.0, 1.0);
-        nlLayerRef.current.colorToAlphaThreshold = 0.05;
-      }
-      nlLayerRef.current.alpha = layers.nightlights.opacity;
-      nlLayerRef.current.show  = true;
-    } else if (nlLayerRef.current) {
-      nlLayerRef.current.show = false;
-    }
-  }, [layers.nightlights]);
 
-  // ── NDVI layer ────────────────────────────────────────────────────────────
+    // Always remove + recreate so year changes take effect immediately.
+    if (nlLayerRef.current) {
+      viewer.imageryLayers.remove(nlLayerRef.current, true);
+      nlLayerRef.current = null;
+    }
+
+    if (!layers.nightlights.enabled) return;
+
+    const snap = year <= 2014 ? "2012-01-01" : "2016-01-01";
+    nlLayerRef.current = viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/${snap}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+        maximumLevel: 8,
+        credit: "NASA / VIIRS Black Marble",
+      })
+    );
+    nlLayerRef.current.colorToAlpha = new Cesium.Color(0.0, 0.0, 0.0, 1.0);
+    nlLayerRef.current.colorToAlphaThreshold = 0.05;
+    nlLayerRef.current.alpha = layers.nightlights.opacity;
+  }, [layers.nightlights, year]);
+
+  // ── NDVI layer — year-responsive ─────────────────────────────────────────
+  // MODIS_Terra_L3_NDVI_Monthly covers 2000–present (confirmed 200 OK for all years).
+  // June is used as the date — peak vegetation month for Sub-Saharan Africa.
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
-    if (layers.ndvi.enabled) {
-      if (!ndviLayerRef.current) {
-        // WebMercator (epsg3857) monthly NDVI — avoids GeographicTilingScheme tile-alignment
-        // issues that caused Australia's vegetation to appear over Africa.
-        // GoogleMapsCompatible_Level7 TileMatrixSet, confirmed 200 OK.
-        ndviLayerRef.current = viewer.imageryLayers.addImageryProvider(
-          new Cesium.UrlTemplateImageryProvider({
-            url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_L3_NDVI_Monthly/default/2026-04-01/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png",
-            maximumLevel: 7,
-            credit: "NASA GSFC / GIBS — MODIS Terra NDVI Monthly",
-          })
-        );
-      }
-      ndviLayerRef.current.alpha = layers.ndvi.opacity;
-      ndviLayerRef.current.show  = true;
-    } else if (ndviLayerRef.current) {
-      ndviLayerRef.current.show = false;
+
+    if (ndviLayerRef.current) {
+      viewer.imageryLayers.remove(ndviLayerRef.current, true);
+      ndviLayerRef.current = null;
     }
-  }, [layers.ndvi]);
+
+    if (!layers.ndvi.enabled) return;
+
+    const clampedYear = Math.max(2000, Math.min(2023, year));
+    ndviLayerRef.current = viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_L3_NDVI_Monthly/default/${clampedYear}-06-01/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
+        maximumLevel: 7,
+        credit: `NASA GSFC / GIBS — MODIS NDVI ${clampedYear}`,
+      })
+    );
+    ndviLayerRef.current.alpha = layers.ndvi.opacity;
+  }, [layers.ndvi, year]);
 
   // ── Settlement density layer ───────────────────────────────────────────────
   useEffect(() => {

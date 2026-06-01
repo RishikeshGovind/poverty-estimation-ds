@@ -14,8 +14,8 @@ interface LayerDef {
 }
 
 const LAYER_DEFS: LayerDef[] = [
-  { id: "nightlights",    label: "Nighttime Lights",    color: "#FBBF24", icon: <Satellite size={14} />,   description: "Electrification proxy" },
-  { id: "ndvi",           label: "Vegetation / NDVI",   color: "#22C55E", icon: <Leaf size={14} />,        description: "Food security proxy" },
+  { id: "nightlights",    label: "Nighttime Lights",    color: "#FBBF24", icon: <Satellite size={14} />,   description: "2012 / 2016 snapshots (VIIRS)" },
+  { id: "ndvi",           label: "Vegetation / NDVI",   color: "#22C55E", icon: <Leaf size={14} />,        description: "2000–2023 by year (MODIS)" },
   { id: "settlements",    label: "Settlement Density",  color: "#F97316", icon: <Users size={14} />,       description: "Road density proxy (Esri)" },
   { id: "poverty",        label: "Poverty Index",       color: "#EF4444", icon: <BarChart2 size={14} />,   description: "World Bank HDI" },
   { id: "infrastructure", label: "Infrastructure",      color: "#60A5FA", icon: <Building size={14} />,   description: "Roads, hospitals, schools (OSM)" },
