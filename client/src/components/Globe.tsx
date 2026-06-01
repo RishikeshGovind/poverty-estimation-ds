@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import { useGlobeStore } from "../store/globeStore";
 import type { PovertyFeature, ConflictEvent } from "../store/globeStore";
@@ -45,6 +45,20 @@ export default function Globe({ onCountryClick }: Props) {
   const flyTo    = useGlobeStore((s) => s.flyTo);
   const setFlyTo = useGlobeStore((s) => s.setFlyTo);
   const year     = useGlobeStore((s) => s.year);
+
+  // Nightlights: only 2 snapshots exist (2012 and 2016) so derive the snapshot
+  // year directly — the layer only recreates when it actually changes, not on
+  // every play-tick, eliminating the flash between years 2000–2014 and 2015–2023.
+  const nlSnap = year <= 2014 ? 2012 : 2016;
+
+  // NDVI: debounce 700 ms so the layer isn't destroyed+recreated on every
+  // 1.2 s play-tick — tiles from the previous year stay visible while the
+  // slider is moving, and only update when the year settles.
+  const [ndviYear, setNdviYear] = useState(year);
+  useEffect(() => {
+    const t = setTimeout(() => setNdviYear(year), 700);
+    return () => clearTimeout(t);
+  }, [year]);
 
   // ── Init viewer once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -174,18 +188,18 @@ export default function Globe({ onCountryClick }: Props) {
 
     if (!layers.nightlights.enabled) return;
 
-    const snap = year <= 2014 ? "2012-01-01" : "2016-01-01";
+    const snap = `${nlSnap}-01-01`;
     nlLayerRef.current = viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/${snap}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
         maximumLevel: 8,
-        credit: "NASA / VIIRS Black Marble",
+        credit: `NASA / VIIRS Black Marble ${nlSnap}`,
       })
     );
     nlLayerRef.current.colorToAlpha = new Cesium.Color(0.0, 0.0, 0.0, 1.0);
     nlLayerRef.current.colorToAlphaThreshold = 0.05;
     nlLayerRef.current.alpha = layers.nightlights.opacity;
-  }, [layers.nightlights, year]);
+  }, [layers.nightlights, nlSnap]);
 
   // ── NDVI layer — year-responsive ─────────────────────────────────────────
   // MODIS_Terra_L3_NDVI_Monthly covers 2000–present (confirmed 200 OK for all years).
@@ -201,7 +215,7 @@ export default function Globe({ onCountryClick }: Props) {
 
     if (!layers.ndvi.enabled) return;
 
-    const clampedYear = Math.max(2000, Math.min(2023, year));
+    const clampedYear = Math.max(2000, Math.min(2023, ndviYear));
     ndviLayerRef.current = viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_L3_NDVI_Monthly/default/${clampedYear}-06-01/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
@@ -210,7 +224,7 @@ export default function Globe({ onCountryClick }: Props) {
       })
     );
     ndviLayerRef.current.alpha = layers.ndvi.opacity;
-  }, [layers.ndvi, year]);
+  }, [layers.ndvi, ndviYear]);
 
   // ── Settlement density layer ───────────────────────────────────────────────
   useEffect(() => {
