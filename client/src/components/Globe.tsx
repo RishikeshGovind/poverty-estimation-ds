@@ -41,24 +41,24 @@ export default function Globe({ onCountryClick }: Props) {
   // currently highlighted satellite entity (reset color on deselect)
   const highlightedEntityRef = useRef<Cesium.Entity | null>(null);
 
-  const layers   = useGlobeStore((s) => s.layers);
-  const flyTo    = useGlobeStore((s) => s.flyTo);
+  const layers  = useGlobeStore((s) => s.layers);
+  const flyTo   = useGlobeStore((s) => s.flyTo);
   const setFlyTo = useGlobeStore((s) => s.setFlyTo);
-  const year     = useGlobeStore((s) => s.year);
+  const year    = useGlobeStore((s) => s.year);
+  const playing = useGlobeStore((s) => s.playing);
 
-  // Nightlights: only 2 snapshots exist (2012 and 2016) so derive the snapshot
-  // year directly — the layer only recreates when it actually changes, not on
-  // every play-tick, eliminating the flash between years 2000–2014 and 2015–2023.
-  const nlSnap = year <= 2014 ? 2012 : 2016;
-
-  // NDVI: debounce 700 ms so the layer isn't destroyed+recreated on every
-  // 1.2 s play-tick — tiles from the previous year stay visible while the
-  // slider is moving, and only update when the year settles.
-  const [ndviYear, setNdviYear] = useState(year);
+  // Satellite imagery layers (nightlights, NDVI) are frozen while the play
+  // button is active — recreating a tile layer every 1.2 s causes a flash as
+  // the old tiles are removed before the new ones load.  Both layers update
+  // immediately when the user pauses on a specific year.
+  //
+  // Nightlights has only 2 snapshots (2012 / 2016) so nlSnap collapses the
+  // 24 slider years into 2 states — the layer never recreates within a range.
+  const [frozenYear, setFrozenYear] = useState(year);
+  const nlSnap  = frozenYear <= 2014 ? 2012 : 2016;
   useEffect(() => {
-    const t = setTimeout(() => setNdviYear(year), 700);
-    return () => clearTimeout(t);
-  }, [year]);
+    if (!playing) setFrozenYear(year);
+  }, [year, playing]);
 
   // ── Init viewer once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -215,7 +215,7 @@ export default function Globe({ onCountryClick }: Props) {
 
     if (!layers.ndvi.enabled) return;
 
-    const clampedYear = Math.max(2000, Math.min(2023, ndviYear));
+    const clampedYear = Math.max(2000, Math.min(2023, frozenYear));
     ndviLayerRef.current = viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
         url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_L3_NDVI_Monthly/default/${clampedYear}-06-01/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
@@ -224,7 +224,7 @@ export default function Globe({ onCountryClick }: Props) {
       })
     );
     ndviLayerRef.current.alpha = layers.ndvi.opacity;
-  }, [layers.ndvi, ndviYear]);
+  }, [layers.ndvi, frozenYear]);
 
   // ── Settlement density layer ───────────────────────────────────────────────
   useEffect(() => {
