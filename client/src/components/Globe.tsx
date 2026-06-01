@@ -230,24 +230,26 @@ export default function Globe({ onCountryClick }: Props) {
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
-    if (layers.settlements.enabled) {
-      if (!settlementsLayerRef.current) {
-        // Esri World Street Map — road density is a strong proxy for settlement density.
-        // Urban cores show dense road grids; rural areas show sparse or no roads.
-        // Esri tile format: tile/{z}/{y}/{x} (row/col, same convention as GIBS WMTS). Confirmed 200 OK.
-        settlementsLayerRef.current = viewer.imageryLayers.addImageryProvider(
-          new Cesium.UrlTemplateImageryProvider({
-            url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-            credit: "© Esri / OpenStreetMap contributors",
-            maximumLevel: 19,
-          })
-        );
-      }
-      settlementsLayerRef.current.alpha = layers.settlements.opacity;
-      settlementsLayerRef.current.show  = true;
-    } else if (settlementsLayerRef.current) {
-      settlementsLayerRef.current.show = false;
+
+    if (settlementsLayerRef.current) {
+      viewer.imageryLayers.remove(settlementsLayerRef.current, true);
+      settlementsLayerRef.current = null;
     }
+
+    if (!layers.settlements.enabled) return;
+
+    // CartoDB Positron light tiles — same CDN as the working dark basemap so
+    // CORS is guaranteed. Road-dense urban areas appear lighter against the
+    // dark satellite base, giving a clear settlement-density signal at all zoom
+    // levels without replacing the satellite imagery entirely.
+    settlementsLayerRef.current = viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: "https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
+        credit: "© CartoDB",
+        maximumLevel: 19,
+      })
+    );
+    settlementsLayerRef.current.alpha = layers.settlements.opacity;
   }, [layers.settlements]);
 
   // ── Infrastructure layer ───────────────────────────────────────────────────
