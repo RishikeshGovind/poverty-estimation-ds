@@ -89,13 +89,13 @@ export default function Globe({ onCountryClick }: Props) {
     viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0a1628");
     viewer.scene.backgroundColor = Cesium.Color.BLACK;
 
-    // EOX S2Cloudless 2021 — real Sentinel-2 satellite imagery, cloud-free annual composite.
-    // Standard XYZ/WebMercator tiles: no projection mismatch, loads identically to CartoDB.
+    // Esri World Imagery — commercial sub-meter satellite imagery (Maxar/Earthstar),
+    // same source as Google Maps. Zoom 19+ in urban areas vs S2Cloudless max 14.
     viewer.imageryLayers.addImageryProvider(
       new Cesium.UrlTemplateImageryProvider({
-        url: "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/g/{z}/{y}/{x}.jpg",
-        credit: "EOX IT Services — Sentinel-2 cloudless 2021",
-        maximumLevel: 14,
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        credit: "Esri, Maxar, Earthstar Geographics",
+        maximumLevel: 19,
       })
     );
     // Dark overlay to keep dashboard contrast for data points
