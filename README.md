@@ -241,11 +241,20 @@ Top feature importances: `is_urban` (48%), `latitude` (16%), `ntl_mean` (10%), `
 
 > **Note on evaluation:** These metrics are from an 80/20 random split on the Kenya + Nigeria DHS dataset. For deployment-realistic estimates, see `experiments/spatial_cv_experiment.py` which runs leave-one-country-out cross-validation to enforce strict geographic separation between train and test sets.
 
-### Deep learning (ResNet18) — preliminary
+### Deep learning (ResNet18) — in progress
 
-CNN model training requires per-cluster Sentinel-2 patches (256 × 256 px). The `s2_kenya_nigeria.pth` checkpoint drives the live `predictions.geojson` (3,048 DHS clusters). Full benchmark results against the tabular baseline using spatial CV are in progress.
+CNN model training requires per-cluster Sentinel-2 patches (256 × 256 px). The inference infrastructure is fully wired: `pipeline/phase2_predict.py` contains a `predict_dhs_cnn()` function that batch-runs any ResNet18 checkpoint over the 3,048 DHS patches and writes the same GeoJSON format as the tabular path.
 
-> **Prediction range note:** The ResNet18 head is an unconstrained linear layer, so predictions can exceed the nominal DHS wealth index range of [−3, +3]. The downstream `wi_to_poverty()` function clips to [0, 100%] so the map display is unaffected, but the raw `wealth_index` property in the GeoJSON may include values outside this range on patches the model has not seen during training.
+Current checkpoints evaluated on held-out Kenya + Nigeria data:
+
+| Checkpoint | R² (held-out) | Note |
+|---|---|---|
+| `s2_kenya_nigeria.pth` | −2.86 | Negative — worse than mean predictor |
+| `best_model.pth` | −2.06 | Negative — worse than mean predictor |
+| `s2_kenya_real.pth` | −0.75 | Negative — worse than mean predictor |
+| **GBR tabular (current demo)** | **+0.776** | Production model |
+
+The CNN checkpoints underperform because 3,048 clusters is too small for a ResNet to generalise without proper NTL pretraining. To activate the CNN path, replace the GBR block in `main()` with a call to `predict_dhs_cnn()` once a checkpoint with positive R² is available. The next step is to complete NTL pretraining (`training/pretrain_ntl.py`) before fine-tuning on DHS labels.
 
 ### Comparison to prior work
 

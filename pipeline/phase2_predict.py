@@ -255,14 +255,13 @@ def predict_dhs_clusters(model, scaler, features: list[str], sat: dict) -> list[
 def main():
     sat = json.load(open(SAT_JSON))
 
-    # Step 1: Try CNN (ResNet18 on S2 patches) for Kenya + Nigeria DHS clusters.
-    # Falls back to the GBR tabular model when the checkpoint is missing.
-    geo_features = predict_dhs_cnn(sat)
-    if not geo_features:
-        print("[predict] Falling back to GBR tabular model for DHS clusters…")
-        bundle = joblib.load(MODEL_PATH)
-        model, scaler, features = bundle["model"], bundle["scaler"], bundle["features"]
-        geo_features = predict_dhs_clusters(model, scaler, features, sat)
+    # Step 1: DHS cluster predictions for Kenya + Nigeria.
+    # CNN path is wired and ready (predict_dhs_cnn) but current checkpoints have
+    # negative R² on held-out data — the CNN needs more DHS data and NTL pretraining
+    # before it outperforms the tabular baseline. Using GBR (R²=0.776) for the demo.
+    bundle = joblib.load(MODEL_PATH)
+    model, scaler, features = bundle["model"], bundle["scaler"], bundle["features"]
+    geo_features = predict_dhs_clusters(model, scaler, features, sat)
 
     geojson = {"type": "FeatureCollection", "features": geo_features}
     GEOJSON_OUT.parent.mkdir(parents=True, exist_ok=True)
