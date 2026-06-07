@@ -10,13 +10,13 @@ function makeFlatTrend(v: number): number[] {
  * Derive SDG 1/7/11 scores and composite from the geojson feature fields.
  *
  * SDG 1  — DHS wealth index [-2, +2] → [0, 100]
- * SDG 7  — VIIRS NTL (nW/cm²/sr), threshold 0.5 → [0, 100]
+ * SDG 7  — VIIRS NTL (nW/cm²/sr), threshold 1.0 → [0, 100]
  * SDG 11 — S2 brightness proxy (derived from NDBI + NTL), threshold 0.3 → [0, 100]
  * Composite — weighted mean (SDG1=1.0, SDG7=0.5, SDG11=0.5)
  */
 function computeSdgScores(wi: number, ntl: number, ndbi: number) {
   const sdg1 = Math.round(Math.min(Math.max((wi + 2) / 4, 0), 1) * 1000) / 10;
-  const sdg7 = Math.round(Math.min(ntl / 0.5, 1) * 1000) / 10;
+  const sdg7 = Math.round(Math.min(ntl / 1.0, 1) * 1000) / 10;
   const brightness = 0.15 + ndbi * 0.25 + ntl * 0.05;
   const sdg11 = Math.round(Math.min(Math.max(brightness / 0.3, 0), 1) * 1000) / 10;
   const composite = Math.round(((sdg1 * 1.0 + sdg7 * 0.5 + sdg11 * 0.5) / 2.0) * 10) / 10;

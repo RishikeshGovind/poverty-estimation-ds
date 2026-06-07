@@ -303,9 +303,9 @@ export default function RegionPopup({ feature: f }: Props) {
           {/* SDG 1 / 7 / 11 bars */}
           {(
             [
-              { label: "SDG 1 — No Poverty",         proxy: "DHS Wealth Index",      value: f.sdg1_score,  color: "#EF4444" },
-              { label: "SDG 7 — Clean Energy",        proxy: "VIIRS Nighttime Lights",value: f.sdg7_score,  color: "#FBBF24" },
-              { label: "SDG 11 — Sustainable Cities", proxy: "S2 Mean Brightness",    value: f.sdg11_score, color: "#60A5FA" },
+              { label: "SDG 1 — No Poverty",         proxy: "DHS Wealth Index  (100 = least poor)",           value: f.sdg1_score,  color: "#EF4444" },
+              { label: "SDG 7 — Clean Energy",        proxy: "VIIRS Nighttime Lights  (100 = full access)",    value: f.sdg7_score,  color: "#FBBF24" },
+              { label: "SDG 11 — Sustainable Cities", proxy: "S2 Mean Brightness proxy  (100 = most built-up)",value: f.sdg11_score, color: "#60A5FA" },
             ] as { label: string; proxy: string; value: number | null | undefined; color: string }[]
           ).map(({ label, proxy, value, color }) => (
             <div key={label} className="mb-2 last:mb-0">
