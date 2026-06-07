@@ -6,6 +6,23 @@ function makeFlatTrend(v: number): number[] {
   return Array(10).fill(parseFloat(v.toFixed(3)));
 }
 
+/**
+ * Derive SDG 1/7/11 scores and composite from the geojson feature fields.
+ *
+ * SDG 1  — DHS wealth index [-2, +2] → [0, 100]
+ * SDG 7  — VIIRS NTL (nW/cm²/sr), threshold 0.5 → [0, 100]
+ * SDG 11 — S2 brightness proxy (derived from NDBI + NTL), threshold 0.3 → [0, 100]
+ * Composite — weighted mean (SDG1=1.0, SDG7=0.5, SDG11=0.5)
+ */
+function computeSdgScores(wi: number, ntl: number, ndbi: number) {
+  const sdg1 = Math.round(Math.min(Math.max((wi + 2) / 4, 0), 1) * 1000) / 10;
+  const sdg7 = Math.round(Math.min(ntl / 0.5, 1) * 1000) / 10;
+  const brightness = 0.15 + ndbi * 0.25 + ntl * 0.05;
+  const sdg11 = Math.round(Math.min(Math.max(brightness / 0.3, 0), 1) * 1000) / 10;
+  const composite = Math.round(((sdg1 * 1.0 + sdg7 * 0.5 + sdg11 * 0.5) / 2.0) * 10) / 10;
+  return { sdg1, sdg7, sdg11, composite };
+}
+
 export function useModelPredictions() {
   const setPovertyFeatures = useGlobeStore((s) => s.setPovertyFeatures);
   // Wait for World Bank data to load first before merging
@@ -37,13 +54,16 @@ export function useModelPredictions() {
             };
           }) => {
             const [lon, lat] = f.geometry.coordinates;
-            const wi = f.properties.wealth_index ?? 0;
+            const wi   = f.properties.wealth_index ?? 0;
+            const ntl  = f.properties.ntl_latest   ?? 0;
+            const ndbi = f.properties.ndbi_latest  ?? 0;
             const poverty_rate = Math.max(0, Math.min(100, 50 - wi * 25));
             const adm1  = f.properties.adm1_name  ?? "";
             const urban = f.properties.urban_rural ?? "";
             const iso3  = f.properties.iso3 ?? "";
             // Encode place info into iso3 field — decoded by RegionPopup
             const placeKey = adm1 ? `CLUSTER|${adm1}|${urban}` : `COUNTRY|${iso3}`;
+            const sdg = computeSdgScores(wi, ntl, ndbi);
             return {
               country:     f.properties.country,
               iso3:        placeKey,
@@ -57,12 +77,12 @@ export function useModelPredictions() {
               ntl_yr_trend: f.properties.ntl_trend,
               ndvi_latest:  f.properties.ndvi_latest,
               ndbi_latest:  f.properties.ndbi_latest,
-              // SDG scores from scoring layer
-              sdg1_score:      f.properties.sdg1_score      ?? null,
-              sdg7_score:      f.properties.sdg7_score      ?? null,
-              sdg11_score:     f.properties.sdg11_score     ?? null,
-              composite_score: f.properties.composite_score ?? null,
-              uncertainty:     f.properties.uncertainty     ?? null,
+              // SDG scores — computed from available signals
+              sdg1_score:      sdg.sdg1,
+              sdg7_score:      sdg.sdg7,
+              sdg11_score:     sdg.sdg11,
+              composite_score: sdg.composite,
+              uncertainty:     f.properties.uncertainty ?? null,
             };
           }
         );
