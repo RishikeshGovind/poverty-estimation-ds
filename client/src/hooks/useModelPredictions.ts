@@ -27,11 +27,13 @@ export function useModelPredictions() {
           (f: {
             geometry: { coordinates: [number, number] };
             properties: {
-              country: string; wealth_index: number; composite_score: number;
+              country: string; wealth_index: number; composite_score?: number;
               adm1_name?: string; region_name?: string; urban_rural?: string;
               iso3?: string;
               ntl_latest?: number; ntl_trend?: number;
               ndvi_latest?: number; ndbi_latest?: number;
+              sdg1_score?: number; sdg7_score?: number; sdg11_score?: number;
+              uncertainty?: number;
             };
           }) => {
             const [lon, lat] = f.geometry.coordinates;
@@ -51,10 +53,16 @@ export function useModelPredictions() {
               ntl_trend:   makeFlatTrend(Math.max(0, wi / 4 + 0.25)),
               ndvi_trend:  makeFlatTrend(0.5),
               // Real satellite signals embedded by phase2_predict.py
-              ntl_latest:  f.properties.ntl_latest,
+              ntl_latest:   f.properties.ntl_latest,
               ntl_yr_trend: f.properties.ntl_trend,
-              ndvi_latest: f.properties.ndvi_latest,
-              ndbi_latest: f.properties.ndbi_latest,
+              ndvi_latest:  f.properties.ndvi_latest,
+              ndbi_latest:  f.properties.ndbi_latest,
+              // SDG scores from scoring layer
+              sdg1_score:      f.properties.sdg1_score      ?? null,
+              sdg7_score:      f.properties.sdg7_score      ?? null,
+              sdg11_score:     f.properties.sdg11_score     ?? null,
+              composite_score: f.properties.composite_score ?? null,
+              uncertainty:     f.properties.uncertainty     ?? null,
             };
           }
         );

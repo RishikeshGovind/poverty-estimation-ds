@@ -23,9 +23,33 @@ function UTCClock() {
   );
 }
 
+function avg(arr: (number | null | undefined)[]): number | null {
+  const valid = arr.filter((v): v is number => v != null);
+  return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
+}
+
+function StatBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col items-end leading-tight">
+      <span className="text-[9px] text-slate-500 uppercase tracking-wider font-mono">{label}</span>
+      <span className="text-[12px] font-bold font-mono text-slate-200">{value}</span>
+    </div>
+  );
+}
+
 export default function TopBar() {
   const { setFlyTo, povertyFeatures } = useGlobeStore();
   const [query, setQuery] = useState("");
+
+  const clusters = povertyFeatures.filter((f) => f.composite_score != null);
+  const sdgStats = {
+    n:         clusters.length,
+    sdg1:      avg(clusters.map((f) => f.sdg1_score)),
+    sdg7:      avg(clusters.map((f) => f.sdg7_score)),
+    sdg11:     avg(clusters.map((f) => f.sdg11_score)),
+    composite: avg(clusters.map((f) => f.composite_score)),
+  };
+  const fmt = (v: number | null) => (v != null ? v.toFixed(1) + "%" : "—");
   const [results, setResults] = useState<typeof povertyFeatures>([]);
 
   function handleSearch(q: string) {
@@ -91,6 +115,17 @@ export default function TopBar() {
           </ul>
         )}
       </div>
+
+      {/* SDG Stats — only shown when cluster predictions are loaded */}
+      {sdgStats.n > 0 && (
+        <div className="hidden xl:flex items-center gap-4 pl-3 border-l border-white/10">
+          <StatBadge label="Clusters"  value={String(sdgStats.n)} />
+          <StatBadge label="SDG 1"     value={fmt(sdgStats.sdg1)} />
+          <StatBadge label="SDG 7"     value={fmt(sdgStats.sdg7)} />
+          <StatBadge label="SDG 11"    value={fmt(sdgStats.sdg11)} />
+          <StatBadge label="Composite" value={fmt(sdgStats.composite)} />
+        </div>
+      )}
 
       {/* UTC Clock */}
       <div className="shrink-0 pl-2 border-l border-white/10">

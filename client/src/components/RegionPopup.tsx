@@ -258,6 +258,74 @@ export default function RegionPopup({ feature: f }: Props) {
         </div>
       )}
 
+      {/* SDG Breakdown — shown when model predictions are loaded */}
+      {f.composite_score != null && (
+        <div className="px-4 pb-3">
+          <p className="text-[10px] text-cyan-400 font-mono uppercase tracking-widest mb-2">
+            SDG Scores
+          </p>
+
+          {/* Composite ring + score grid */}
+          <div className="flex items-center gap-3 mb-2">
+            {/* Ring */}
+            <div className="relative w-12 h-12 shrink-0">
+              <svg viewBox="0 0 100 100" width="48" height="48"
+                   style={{ transform: "rotate(-90deg)" }}>
+                <circle cx="50" cy="50" r="42" fill="none"
+                        stroke="#252a40" strokeWidth="12" />
+                <circle cx="50" cy="50" r="42" fill="none"
+                  stroke={
+                    f.composite_score >= 70 ? "#22C55E" :
+                    f.composite_score >= 40 ? "#F59E0B" : "#EF4444"
+                  }
+                  strokeWidth="12" strokeLinecap="round"
+                  strokeDasharray="263.9"
+                  strokeDashoffset={263.9 - (f.composite_score / 100) * 263.9}
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-[11px] font-bold font-mono text-white">
+                  {f.composite_score.toFixed(0)}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[11px] text-white font-semibold">Composite SDG</p>
+              {f.uncertainty != null && (
+                <p className="text-[9px] text-slate-500 mt-0.5">
+                  Uncertainty ±{f.uncertainty.toFixed(3)}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* SDG 1 / 7 / 11 bars */}
+          {(
+            [
+              { label: "SDG 1 — No Poverty",         proxy: "DHS Wealth Index",      value: f.sdg1_score,  color: "#EF4444" },
+              { label: "SDG 7 — Clean Energy",        proxy: "VIIRS Nighttime Lights",value: f.sdg7_score,  color: "#FBBF24" },
+              { label: "SDG 11 — Sustainable Cities", proxy: "S2 Mean Brightness",    value: f.sdg11_score, color: "#60A5FA" },
+            ] as { label: string; proxy: string; value: number | null | undefined; color: string }[]
+          ).map(({ label, proxy, value, color }) => (
+            <div key={label} className="mb-2 last:mb-0">
+              <div className="flex justify-between items-baseline mb-0.5">
+                <span className="text-[10px] text-slate-300">{label}</span>
+                <span className="text-[11px] font-mono font-bold"
+                      style={{ color: value == null ? "#64748b" : value >= 70 ? "#22C55E" : value >= 40 ? "#F59E0B" : "#EF4444" }}>
+                  {value != null ? `${value.toFixed(1)}%` : "N/A"}
+                </span>
+              </div>
+              <p className="text-[9px] text-slate-600 mb-1">{proxy}</p>
+              <div className="h-1 bg-white/10 rounded overflow-hidden">
+                <div className="h-full rounded transition-all"
+                     style={{ width: `${value ?? 0}%`, background: color }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Actions */}
       <div className="px-4 pb-3 flex gap-2">
         <a

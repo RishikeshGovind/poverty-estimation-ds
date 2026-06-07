@@ -1,14 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import { useGlobeStore } from "../store/globeStore";
-import type { PovertyFeature, ConflictEvent } from "../store/globeStore";
+import type { PovertyFeature, ConflictEvent, SdgLayer } from "../store/globeStore";
 import { SAT_ORBITS, orbitXYZ, MU, R_EARTH } from "../utils/orbitPropagator";
 import type { SatelliteInfo } from "../utils/orbitPropagator";
 
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN ?? "";
 
-function povertyColor(rate: number | null, opacity: number): Cesium.Color {
-  const t = Math.min((rate ?? 50) / 80, 1);
+function sdgColor(score: number | null | undefined, opacity: number): Cesium.Color {
+  if (score == null) return Cesium.Color.fromCssColorString("#64748b").withAlpha(opacity);
+  if (score >= 70)   return Cesium.Color.fromCssColorString("#22C55E").withAlpha(opacity);
+  if (score >= 40)   return Cesium.Color.fromCssColorString("#F59E0B").withAlpha(opacity);
+  return               Cesium.Color.fromCssColorString("#EF4444").withAlpha(opacity);
+}
+
+function pointColor(f: PovertyFeature, layer: SdgLayer, opacity: number): Cesium.Color {
+  // DHS cluster features have SDG scores — use them
+  if (f.composite_score != null) {
+    const score =
+      layer === "sdg1"  ? f.sdg1_score  :
+      layer === "sdg7"  ? f.sdg7_score  :
+      layer === "sdg11" ? f.sdg11_score :
+                          f.composite_score;
+    return sdgColor(score, opacity);
+  }
+  // World Bank country dots — fall back to poverty-rate gradient
+  const t = Math.min(((f.poverty_rate ?? 50)) / 80, 1);
   return new Cesium.Color(0.6 + 0.4 * t, 0.6 * (1 - t), 0.1, opacity);
 }
 
@@ -304,6 +321,7 @@ export default function Globe({ onCountryClick }: Props) {
     let prevPoverty  = useGlobeStore.getState().povertyFeatures;
     let prevConflict = useGlobeStore.getState().conflictEvents;
     let prevLayers   = useGlobeStore.getState().layers;
+    let prevSdgLayer = useGlobeStore.getState().sdgLayer;
 
     function rebuild(state: ReturnType<typeof useGlobeStore.getState>) {
       const viewer = viewerRef.current;
@@ -318,7 +336,7 @@ export default function Globe({ onCountryClick }: Props) {
         state.povertyFeatures.forEach((f) => {
           col.add({
             position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 20000),
-            color: povertyColor(f.poverty_rate, state.layers.poverty.opacity),
+            color: pointColor(f, state.sdgLayer, state.layers.poverty.opacity),
             pixelSize: 9,
             outlineColor: Cesium.Color.WHITE.withAlpha(0.7),
             outlineWidth: 1.5,
@@ -358,11 +376,13 @@ export default function Globe({ onCountryClick }: Props) {
       if (
         state.povertyFeatures !== prevPoverty ||
         state.conflictEvents  !== prevConflict ||
-        state.layers          !== prevLayers
+        state.layers          !== prevLayers   ||
+        state.sdgLayer        !== prevSdgLayer
       ) {
         prevPoverty  = state.povertyFeatures;
         prevConflict = state.conflictEvents;
         prevLayers   = state.layers;
+        prevSdgLayer = state.sdgLayer;
         rebuild(state);
       }
     });

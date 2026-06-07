@@ -8,6 +8,7 @@ import AskAfricaLens from "./components/AskAfricaLens";
 import RegionPopup from "./components/RegionPopup";
 import SatellitePopup from "./components/SatellitePopup";
 import ConflictPopup from "./components/ConflictPopup";
+import SdgToolbar from "./components/SdgToolbar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useGlobeStore } from "./store/globeStore";
 import { useWorldBank } from "./hooks/useWorldBank";
@@ -44,6 +45,7 @@ export default function App() {
       {/* UI chrome on top */}
       <TopBar />
       <Sidebar />
+      <SdgToolbar />
       <InsightsFeed />
       <Timeline />
       <AskAfricaLens />

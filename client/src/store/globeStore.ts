@@ -41,7 +41,15 @@ export interface PovertyFeature {
   ntl_yr_trend?: number; // slope per year
   ndvi_latest?: number;  // MODIS NDVI [0–1]
   ndbi_latest?: number;  // Landsat NDBI [−1–1]
+  // SDG scores from model predictions (0–100)
+  sdg1_score?: number | null;
+  sdg7_score?: number | null;
+  sdg11_score?: number | null;
+  composite_score?: number | null;
+  uncertainty?: number | null;
 }
+
+export type SdgLayer = "composite" | "sdg1" | "sdg7" | "sdg11";
 
 interface GlobeStore {
   // Active year on the timeline
@@ -49,6 +57,10 @@ interface GlobeStore {
   setYear: (y: number) => void;
   playing: boolean;
   setPlaying: (p: boolean) => void;
+
+  // SDG layer toggle (controls how cluster dots are coloured)
+  sdgLayer: SdgLayer;
+  setSdgLayer: (l: SdgLayer) => void;
 
   // Per-layer state
   layers: Record<LayerId, LayerState>;
@@ -105,6 +117,9 @@ export const useGlobeStore = create<GlobeStore>((set) => ({
   setYear: (year) => set({ year }),
   playing: false,
   setPlaying: (playing) => set({ playing }),
+
+  sdgLayer: "composite",
+  setSdgLayer: (sdgLayer) => set({ sdgLayer }),
 
   layers: DEFAULT_LAYERS,
   toggleLayer: (id) =>
