@@ -1,24 +1,16 @@
 """
 Phase 3 Task 7 — Generate predictions.geojson for all SSA countries.
 
-For countries with real DHS patches (Kenya, Nigeria) the model was trained on
-per-cluster VIIRS + S2 statistics. For the other 26 countries we only have
-country-level satellite data from satellite_features.json, so we derive
-approximate cluster-level features using calibrated scaling factors validated
-against the Kenya/Nigeria training distributions.
+For Kenya and Nigeria (countries with real DHS cluster data + Sentinel-2 patches)
+we run the trained ResNet18 CNN directly on the 256×256 S2 patches.
 
-Feature mapping from country-level satellite data:
-  ntl_mean   = sat_ntl * 2.0 (urban) / 1.0 (rural)  — DHS clusters in urban
-               areas have ~2× the national NTL average; rural ≈ national avg
-  ntl_std    = ntl_mean * 0.22                         — empirical from training
-  ntl_max    = ntl_mean * 1.8                          — empirical from training
-  s2_exgreen = (ndvi − 0.25) * 0.12 − ndbi * 0.08    — derived from band physics
-  s2_brightness = 0.15 + ndbi * 0.25 + ntl_mean * 0.05
-  ntl_trend  = slope of NTL 2019→2023 time series
-  is_urban   = 1 (urban point) / 0 (rural point)
-  lat, lon   = cluster location
+Fallback: if the CNN checkpoint is missing, the GBR tabular model is used instead.
+This ensures the script always produces output even without the deep-learning weights.
 
-Output: client/public/predictions.geojson   (served by Vercel / GitHub Pages)
+For all other 26 SSA countries we only have country-level satellite aggregates,
+so predictions are estimated from a GBR tabular model using nine derived features.
+
+Output: client/public/predictions.geojson   (served by GitHub Pages / Vite dev)
 """
 
 import json
@@ -26,16 +18,21 @@ import math
 import joblib
 import numpy as np
 import pandas as pd
+import torch
 from pathlib import Path
 
-PIPELINE    = Path(__file__).parent
-SAT_JSON     = PIPELINE / "outputs" / "satellite_features.json"
-MODEL_PATH   = PIPELINE / "outputs" / "sat_model.joblib"
-TRAIN_CSV    = PIPELINE / "outputs" / "training_with_satellite.csv"
-GEOJSON_OUT  = Path("client/public/predictions.geojson")
+PIPELINE      = Path(__file__).parent
+SAT_JSON      = PIPELINE / "outputs" / "satellite_features.json"
+MODEL_PATH    = PIPELINE / "outputs" / "sat_model.joblib"
+TRAIN_CSV     = PIPELINE / "outputs" / "training_with_satellite.csv"
+GEOJSON_OUT   = Path("client/public/predictions.geojson")
 
-# Countries with real DHS cluster data — use actual cluster locations + model predictions.
-# All other countries get synthetic urban/rural grid points.
+# CNN artefacts — produced by training/trainer.py
+CNN_CKPT      = Path("outputs/models/s2_kenya_nigeria.pth")
+PATCH_CSV     = Path("data/training_dataset.csv")   # 3 048 DHS clusters, patch paths
+
+# Countries with real DHS cluster data + S2 patches.
+# All other countries get synthetic urban/rural grid points (GBR tabular model).
 DHS_COUNTRIES = {"KEN": "Kenya", "NGA": "Nigeria"}
 
 COUNTRY_CENTROIDS = {
@@ -113,8 +110,110 @@ def wi_to_poverty(wi: float) -> float:
     return max(0.0, min(100.0, 50.0 - wi * 25.0))
 
 
+def _load_patch(path: str) -> np.ndarray | None:
+    """Load a .npy S2 patch and return a float32 (C, H, W) array clipped to [0,1]."""
+    try:
+        arr = np.load(path).astype(np.float32)
+        return np.clip(arr, 0.0, 1.0)
+    except Exception:
+        return None
+
+
+def predict_dhs_cnn(sat: dict) -> list[dict]:
+    """
+    Run ResNet18 on S2 patches for every Kenya + Nigeria DHS cluster.
+
+    Returns the same GeoJSON feature list format as predict_dhs_clusters so
+    main() can swap between them transparently. Returns [] on any failure so
+    the caller can fall back to the GBR path.
+    """
+    if not CNN_CKPT.exists():
+        print(f"[predict] CNN checkpoint not found at {CNN_CKPT} — skipping CNN path")
+        return []
+    if not PATCH_CSV.exists():
+        print(f"[predict] Patch CSV not found at {PATCH_CSV} — skipping CNN path")
+        return []
+
+    # Import here to avoid requiring torch at module level when only GBR is needed
+    from models.resnet_model import ResNetRegression
+
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+
+    # Load with dropout_p=0.3 to match checkpoint architecture; eval() disables it.
+    model = ResNetRegression(in_channels=3, dropout_p=0.3).to(device)
+    state = torch.load(str(CNN_CKPT), map_location=device)
+    model.load_state_dict(state)
+    model.eval()
+    print(f"[predict] CNN loaded from {CNN_CKPT} on {device}")
+
+    df = pd.read_csv(PATCH_CSV)
+    # Backward-compat: prefer s2_patch_file, fall back to patch_file
+    if "s2_patch_file" not in df.columns and "patch_file" in df.columns:
+        df["s2_patch_file"] = df["patch_file"]
+
+    # Batch inference — collect patches that exist, run in chunks of 32
+    valid_rows, tensors = [], []
+    for _, row in df.iterrows():
+        patch_path = str(row.get("s2_patch_file", ""))
+        arr = _load_patch(patch_path)
+        if arr is None or arr.shape[0] != 3:
+            continue
+        valid_rows.append(row)
+        tensors.append(torch.from_numpy(arr))
+
+    if not tensors:
+        print("[predict] No valid S2 patches found — skipping CNN path")
+        return []
+
+    all_wi: list[float] = []
+    batch_size = 32
+    with torch.no_grad():
+        for i in range(0, len(tensors), batch_size):
+            batch = torch.stack(tensors[i : i + batch_size]).to(device)
+            preds = model(batch).cpu().numpy().flatten()
+            all_wi.extend(preds.tolist())
+
+    geo = []
+    for row, wi in zip(valid_rows, all_wi):
+        iso3 = {"Kenya": "KEN", "Nigeria": "NGA"}.get(row["country"], "")
+        sat_feats = sat.get(iso3, {})
+        ntl  = sat_feats.get("ntl",  {})
+        ndvi = sat_feats.get("ndvi", {})
+        ndbi = sat_feats.get("ndbi", {})
+        urban_code = str(row.get("URBAN_RURA", ""))
+        geo.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [round(float(row["longitude"]), 5), round(float(row["latitude"]), 5)],
+            },
+            "properties": {
+                "country":         row["country"],
+                "iso3":            iso3,
+                "wealth_index":    round(float(wi), 4),
+                "poverty_rate":    round(wi_to_poverty(float(wi)), 1),
+                "urban_rural":     "Urban" if urban_code == "U" else "Rural",
+                "adm1_name":       str(row.get("ADM1NAME", "")),
+                "composite_score": round(max(0.0, min(100.0, (float(wi) + 2.0) / 4.0 * 100.0)), 1),
+                "ntl_latest":      float(ntl.get("2023",  ntl.get("2022",  0))),
+                "ntl_trend":       round(ntl_trend(ntl), 6),
+                "ndvi_latest":     float(ndvi.get("2023", ndvi.get("2022", 0))),
+                "ndbi_latest":     float(ndbi.get("2023", ndbi.get("2022", 0))),
+                "model":           "cnn_resnet18",
+            },
+        })
+
+    print(f"[predict] {len(geo)} CNN predictions (Kenya + Nigeria DHS clusters)")
+    return geo
+
+
 def predict_dhs_clusters(model, scaler, features: list[str], sat: dict) -> list[dict]:
-    """Run model on all real DHS clusters for Kenya + Nigeria."""
+    """Run GBR tabular model on all real DHS clusters for Kenya + Nigeria."""
     if not TRAIN_CSV.exists():
         print(f"[predict] {TRAIN_CSV} not found — skipping DHS cluster predictions")
         return []
@@ -154,15 +253,16 @@ def predict_dhs_clusters(model, scaler, features: list[str], sat: dict) -> list[
 
 
 def main():
-    print("[predict] Loading model…")
-    bundle = joblib.load(MODEL_PATH)
-    model, scaler, features = bundle["model"], bundle["scaler"], bundle["features"]
-    print(f"[predict] Model features: {features}")
-
     sat = json.load(open(SAT_JSON))
 
-    # Step 1: Real DHS cluster predictions for Kenya + Nigeria
-    geo_features = predict_dhs_clusters(model, scaler, features, sat)
+    # Step 1: Try CNN (ResNet18 on S2 patches) for Kenya + Nigeria DHS clusters.
+    # Falls back to the GBR tabular model when the checkpoint is missing.
+    geo_features = predict_dhs_cnn(sat)
+    if not geo_features:
+        print("[predict] Falling back to GBR tabular model for DHS clusters…")
+        bundle = joblib.load(MODEL_PATH)
+        model, scaler, features = bundle["model"], bundle["scaler"], bundle["features"]
+        geo_features = predict_dhs_clusters(model, scaler, features, sat)
 
     geojson = {"type": "FeatureCollection", "features": geo_features}
     GEOJSON_OUT.parent.mkdir(parents=True, exist_ok=True)
@@ -170,7 +270,8 @@ def main():
         json.dump(geojson, f)
 
     size_kb = GEOJSON_OUT.stat().st_size / 1024
-    print(f"[predict] Saved → {GEOJSON_OUT}  ({size_kb:.1f} KB, {len(geo_features)} real DHS clusters)")
+    model_tag = "CNN (ResNet18)" if geo_features and geo_features[0].get("properties", {}).get("model") == "cnn_resnet18" else "GBR tabular"
+    print(f"[predict] Saved → {GEOJSON_OUT}  ({size_kb:.1f} KB, {len(geo_features)} clusters, model={model_tag})")
 
 
 if __name__ == "__main__":

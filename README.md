@@ -243,7 +243,9 @@ Top feature importances: `is_urban` (48%), `latitude` (16%), `ntl_mean` (10%), `
 
 ### Deep learning (ResNet18) — preliminary
 
-CNN model training requires per-cluster Sentinel-2 patches (256 × 256 px). Full benchmark results against the tabular baseline using spatial CV are in progress.
+CNN model training requires per-cluster Sentinel-2 patches (256 × 256 px). The `s2_kenya_nigeria.pth` checkpoint drives the live `predictions.geojson` (3,048 DHS clusters). Full benchmark results against the tabular baseline using spatial CV are in progress.
+
+> **Prediction range note:** The ResNet18 head is an unconstrained linear layer, so predictions can exceed the nominal DHS wealth index range of [−3, +3]. The downstream `wi_to_poverty()` function clips to [0, 100%] so the map display is unaffected, but the raw `wealth_index` property in the GeoJSON may include values outside this range on patches the model has not seen during training.
 
 ### Comparison to prior work
 
