@@ -4,7 +4,7 @@
 
 That is the question this project tries to answer.
 
-**Live demo:** [africalens.github.io](https://rishikeshgovind.github.io/poverty-estimation-ai/) | **API:** Render (FastAPI)
+**Live demo:** [PovertyEstimation.vercel.app](https://poverty-estimation-ds.vercel.app/) | **API:** Render (FastAPI)
 
 ---
 
@@ -23,12 +23,15 @@ We pull satellite images from space, feed them into a deep learning model (the s
 This project is built around the same three research goals as the [Chalmers University PhD project on AI and Global Development](https://www.aidevlab.org):
 
 **Goal 1: Predict poverty from satellite images**
+
 Train a computer vision AI to look at satellite images of villages and cities and output a score for how wealthy or poor that area is. We use survey data from Kenya and Nigeria as ground truth.
 
 **Goal 2: Compare different satellites**
+
 Not all satellite data is equal. Some take sharp 10-metre photos. Others take blurrier 30-metre ones. Some only capture light at night. We test which combination gives the best poverty estimates at the lowest data cost.
 
 **Goal 3: Explain what the model sees**
+
 A model that says "this area is poor" is not useful if nobody knows why it said that. We draw a heatmap over each satellite photo showing which parts of the image (rooftops, roads, lit streets) drove the prediction. This is essential for policymakers to trust the results.
 
 ---
@@ -61,18 +64,23 @@ We have real survey data for **Kenya and Nigeria** (about 3,000 clusters from th
 All satellite data is pulled through [Google Earth Engine](https://earthengine.google.com), a free platform for analysing satellite images at scale. The extraction pipeline lives in `pipeline/`.
 
 **VIIRS nighttime lights (2014 to 2024)**
+
 A NASA satellite photographs Earth every night. Brighter spots have more electricity. We use 10 years of these photos as a stand-in for electrification and economic activity. We also use them in the first training stage (see below).
 
 **Sentinel-2 colour photos (2019 to present)**
+
 A European Space Agency satellite takes colour photos at 10 metres per pixel. We cut a 256x256 pixel square around each survey cluster. That covers roughly 2.5 km x 2.5 km, about the size of a large neighbourhood. These images are the main input to our deep learning models.
 
 **Landsat 8/9 photos (2014 to 2024)**
+
 An older NASA satellite with 30-metre resolution. Less sharp than Sentinel-2 but with a longer history. Useful for comparing how much resolution actually matters.
 
 **Sentinel-1 radar (ongoing)**
+
 Radar satellites use their own radio signal instead of sunlight, so they work through clouds and at night. We test whether adding radar data improves predictions in cloud-heavy regions.
 
 **Extra layers**
+
 We also include land cover maps (forests, crops, buildings, water), population density maps, building footprint data, and estimated distances to roads, hospitals, and schools.
 
 ---
@@ -82,10 +90,12 @@ We also include land cover maps (forests, crops, buildings, water), population d
 Two simple formulas tell us a lot from a satellite photo:
 
 **NDVI (how green is this area?)**
+
 High NDVI means lots of vegetation like forests or crops. Low NDVI means roads, buildings, or bare soil.
 Formula: `(near-infrared - red) / (near-infrared + red)`
 
 **NDBI (how built up is this area?)**
+
 High NDBI means lots of concrete and rooftops.
 Formula: `(shortwave-infrared - near-infrared) / (shortwave-infrared + near-infrared)`
 
@@ -269,16 +279,21 @@ Direct comparisons are not straightforward because the datasets and countries di
 The United Nations Sustainable Development Goals (SDGs) set targets for reducing poverty, expanding energy access, and building sustainable cities by 2030. We estimate a 0 to 100 progress score for three of those goals using satellite signals as proxies.
 
 **SDG 1 (No Poverty)**
+
 Based on the predicted wealth index. Score of 100 means wealthiest observed cluster. Score of 0 means poorest.
 
 **SDG 7 (Clean Energy)**
+
 Based on nighttime light level. High light level suggests reliable electricity access.
 
 **SDG 11 (Sustainable Cities)**
+
 Based on how bright the visible image is, which correlates with built-up surfaces and infrastructure.
 
 **Composite score**
+
 A weighted average across all three goals. SDG 1 gets double the weight of SDG 7 and SDG 11.
+
 
 > These scores use thresholds estimated from the satellite data distributions, not from official UN monitoring methods. They are useful for comparing clusters and tracking trends. They should not be reported as official SDG statistics without further validation against survey data.
 
@@ -445,16 +460,21 @@ Copy `.env.example` to `.env` and fill in:
 ## Why We Made Certain Choices
 
 **Why DHS labels?**
+
 DHS surveys are the most trusted source of sub-national poverty data in low-income countries. The wealth index is a continuous score, which lets us treat poverty prediction as a regression problem (predicting a number on a scale) rather than a simple yes/no classification. That produces more useful output.
 
 **Why pretrain on nighttime lights?**
+
 VIIRS nighttime light data covers the whole globe and goes back to 2012. It gives us millions of free training examples. By teaching the model to predict nighttime lights first, we give it a head start in understanding what wealth-related features look like from space. Then we fine-tune on the much smaller DHS dataset. This idea comes from Jean et al. (2016) and is one of the most cited techniques in this field.
 
 **Why leave-one-country-out cross-validation?**
+
 If we randomly split survey clusters into training and test sets, clusters from the same country end up on both sides. Because nearby clusters share the same weather, soil, and local economy, the model can score well on the test set just by memorising nearby training examples, without actually generalising. Holding out an entire country forces a much harder and more honest test.
 
 **Why GradCAM on the last convolutional layer?**
+
 The last convolutional layer in ResNet18 captures high-level patterns like "is there a dense road grid here?" rather than low-level ones like "is there a horizontal edge here?". It also still holds spatial information (which part of the image triggered the pattern), which the pooling layer immediately after it throws away. That combination makes it the right layer to visualise.
 
 **Why a tabular model for countries beyond Kenya and Nigeria?**
-To run the CNN, we need a 256x256 pixel satellite image patch centred on each survey cluster. We only have those patches for Kenya and Nigeria. For the other 26 countries, we only have one average number per country per year. The Gradient Boosting model can work with those country-level averages and still give a rough poverty estimate, so it fills the gap while we expand the image patch dataset.
+
+To run the CNN, we need a 256x256 pixel satellite image patch centred on each survey cluster. We only have added those patches for Kenya and Nigeria. For the other 26 countries, we only have one average number per country per year. The Gradient Boosting model can work with those country-level averages and still give a rough poverty estimate, so it fills the gap while we expand the image patch dataset.
