@@ -2,23 +2,18 @@ import { TrendingUp, TrendingDown, Minus, MapPin, Info } from "lucide-react";
 import { useGlobeStore } from "../store/globeStore";
 import type { PovertyFeature } from "../store/globeStore";
 
-// delta = poverty rate change (pp): negative means improvement, positive means worsening
-function TrendBadge({ delta }: { delta: number | null }) {
-  if (delta === null) return null;
-  // Poverty falling = good (green), rising = bad (red)
-  if (delta < -2) return <span className="flex items-center gap-0.5 text-green-400 text-[10px]"><TrendingDown size={10}/>{Math.abs(delta).toFixed(1)}pp</span>;
-  if (delta > 2)  return <span className="flex items-center gap-0.5 text-red-400   text-[10px]"><TrendingUp   size={10}/>+{delta.toFixed(1)}pp</span>;
-  return                 <span className="flex items-center gap-0.5 text-slate-500  text-[10px]"><Minus        size={10}/>stable</span>;
+// slope = NTL radiance slope (nW/cm²/sr per year) from VIIRS — positive = electrification growing
+function TrendBadge({ slope }: { slope: number | null | undefined }) {
+  if (slope == null) return null;
+  if (slope > 0.02)  return <span className="flex items-center gap-0.5 text-green-400 text-[10px]"><TrendingUp   size={10}/>NTL ↑</span>;
+  if (slope < -0.005) return <span className="flex items-center gap-0.5 text-red-400   text-[10px]"><TrendingDown size={10}/>NTL ↓</span>;
+  return                     <span className="flex items-center gap-0.5 text-slate-500  text-[10px]"><Minus        size={10}/>NTL stable</span>;
 }
 
 function InsightCard({ f, rank }: { f: PovertyFeature; rank: number }) {
   const { setSelected, setFlyTo } = useGlobeStore();
   const pRate = f.poverty_rate ?? 50;
   const isHigh = pRate > 55;
-
-  // Real delta from World Bank historical series (first→last known value)
-  const trend = f.ntl_trend;
-  const delta = trend.length >= 2 ? trend[trend.length - 1] - trend[0] : null;
 
   return (
     <div className="border-b border-white/5 px-3 py-3 hover:bg-white/3 transition-colors cursor-default">
@@ -33,7 +28,7 @@ function InsightCard({ f, rank }: { f: PovertyFeature; rank: number }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-200 truncate">{f.country}</span>
-            <TrendBadge delta={delta} />
+            <TrendBadge slope={f.ntl_yr_trend} />
           </div>
 
           {/* Poverty bar */}
