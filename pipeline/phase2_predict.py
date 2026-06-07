@@ -71,12 +71,6 @@ COUNTRY_CENTROIDS = {
     "HTI": ("Haiti",         18.97, -72.29),
 }
 
-# Number of synthetic points per country
-N_URBAN = 1
-N_RURAL = 3
-RNG = np.random.default_rng(42)
-
-
 def ntl_trend(ntl_by_year: dict) -> float:
     years = sorted(int(y) for y in ntl_by_year)
     if len(years) < 2:
@@ -171,63 +165,13 @@ def main():
     # Step 1: Real DHS cluster predictions for Kenya + Nigeria
     geo_features = predict_dhs_clusters(model, scaler, features, sat)
 
-    # Step 2: Synthetic points for the other 28 countries
-    X_rows, meta = [], []
-    for iso3, (country, clat, clon) in COUNTRY_CENTROIDS.items():
-        if iso3 in DHS_COUNTRIES:
-            continue   # already handled above with real clusters
-        sat_feats = sat.get(iso3, {})
-
-        X_rows.append(make_features(sat_feats, clat, clon, 1))
-        meta.append((country, iso3, clat, clon, "Urban"))
-
-        for _ in range(N_RURAL):
-            lat = clat + RNG.uniform(-2.0, 2.0)
-            lon = clon + RNG.uniform(-2.0, 2.0)
-            X_rows.append(make_features(sat_feats, lat, lon, 0))
-            meta.append((country, iso3, lat, lon, "Rural"))
-
-    X = scaler.transform(np.array(X_rows, dtype=np.float32))
-    preds = model.predict(X)
-    print(f"[predict] {len(preds)} synthetic predictions across {len(COUNTRY_CENTROIDS) - len(DHS_COUNTRIES)} other countries")
-
-    for (country, iso3, lat, lon, ur), wi in zip(meta, preds):
-        wi  = float(wi)
-        sat_feats = sat.get(iso3, {})
-        ntl  = sat_feats.get("ntl",  {})
-        ndvi = sat_feats.get("ndvi", {})
-        ndbi = sat_feats.get("ndbi", {})
-        geo_features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [round(lon, 5), round(lat, 5)]},
-            "properties": {
-                "country":         country,
-                "iso3":            iso3,
-                "wealth_index":    round(wi, 4),
-                "poverty_rate":    round(wi_to_poverty(wi), 1),
-                "urban_rural":     ur,
-                "adm1_name":       "",
-                "composite_score": round(max(0, min(100, (wi + 2) / 4 * 100)), 1),
-                "ntl_latest":      float(ntl.get("2023",  ntl.get("2022",  0))),
-                "ntl_trend":       round(ntl_trend(ntl), 6),
-                "ndvi_latest":     float(ndvi.get("2023", ndvi.get("2022", 0))),
-                "ndbi_latest":     float(ndbi.get("2023", ndbi.get("2022", 0))),
-            },
-        })
-
     geojson = {"type": "FeatureCollection", "features": geo_features}
     GEOJSON_OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(GEOJSON_OUT, "w") as f:
         json.dump(geojson, f)
 
     size_kb = GEOJSON_OUT.stat().st_size / 1024
-    print(f"[predict] Saved → {GEOJSON_OUT}  ({size_kb:.1f} KB)")
-
-    # Summary
-    print("\n[predict] Country poverty estimates (urban point):")
-    urban_preds = [(m, wi) for m, wi in zip(meta, preds) if m[4] == "Urban"]
-    for (country, iso3, _, _, _), wi in sorted(urban_preds, key=lambda x: -x[1]):
-        print(f"  {iso3}  {country:<20}  poverty={wi_to_poverty(wi):.1f}%  wi={wi:.3f}")
+    print(f"[predict] Saved → {GEOJSON_OUT}  ({size_kb:.1f} KB, {len(geo_features)} real DHS clusters)")
 
 
 if __name__ == "__main__":
