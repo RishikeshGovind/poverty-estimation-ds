@@ -52,7 +52,6 @@ SSA_COUNTRIES = [
     {"iso3": "SLE", "name": "Sierra Leone",  "gee_name": "Sierra Leone"},
     {"iso3": "TGO", "name": "Togo",          "gee_name": "Togo"},
     {"iso3": "BEN", "name": "Benin",         "gee_name": "Benin"},
-    {"iso3": "HTI", "name": "Haiti",         "gee_name": "Haiti"},
 ]
 
 GEE_NAMES = [c["gee_name"] for c in SSA_COUNTRIES]

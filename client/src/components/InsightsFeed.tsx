@@ -79,7 +79,7 @@ function DataCoverageNote() {
       <div className="flex items-start gap-1.5 mb-2">
         <Info size={11} className="text-amber-400 shrink-0 mt-0.5" />
         <p className="text-[10px] text-amber-300 leading-relaxed">
-          Cluster-level survey data currently available for <span className="font-semibold">2 countries</span> only (DHS 2022–23). All other countries show World Bank national estimates.
+          Cluster-level survey data currently added for <span className="font-semibold">2 countries</span> only (DHS 2022–23). All other countries show World Bank national estimates.
         </p>
       </div>
       <div className="flex gap-1.5 pl-4">

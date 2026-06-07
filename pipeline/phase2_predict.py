@@ -68,7 +68,6 @@ COUNTRY_CENTROIDS = {
     "SLE": ("Sierra Leone",   8.46, -11.78),
     "TGO": ("Togo",           8.62,   0.82),
     "BEN": ("Benin",          9.31,   2.32),
-    "HTI": ("Haiti",         18.97, -72.29),
 }
 
 def ntl_trend(ntl_by_year: dict) -> float:

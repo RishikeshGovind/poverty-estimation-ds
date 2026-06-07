@@ -32,7 +32,6 @@ const SSA_COUNTRIES: { iso3: string; name: string; lat: number; lon: number }[] 
   { iso3: "SLE", name: "Sierra Leone",      lat:  8.46,  lon:-11.78 },
   { iso3: "TGO", name: "Togo",              lat:  8.62,  lon:   0.82 },
   { iso3: "BEN", name: "Benin",             lat:  9.31,  lon:   2.32 },
-  { iso3: "HTI", name: "Haiti",             lat: 18.97,  lon: -72.29 },
 ];
 
 export function useWorldBank(year: number) {

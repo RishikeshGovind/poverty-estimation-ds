@@ -28,7 +28,7 @@ The work is structured around three objectives that mirror the PhD research agen
 
 The Demographic and Health Surveys (DHS) provide the primary poverty labels. Each DHS cluster (a village or urban neighbourhood) is assigned a continuous **wealth index** (approximately −3 to +3) derived from household asset ownership and housing quality data. We use GPS-georeferenced cluster coordinates to spatially join survey points to satellite patches.
 
-Countries covered: Kenya, Nigeria, Ethiopia, Ghana, Tanzania, Rwanda, Malawi.
+Countries with real DHS cluster data: **Kenya, Nigeria** (DHS 2022–23 rounds, ~3,000 geo-referenced clusters). An additional 26 Sub-Saharan African countries are included in the map using country-level satellite aggregates from Google Earth Engine; those predictions are approximations and should not be treated as survey-equivalent estimates.
 
 Label construction follows the sustainlab approach: the cluster-level wealth index is used directly as the regression target. For multi-task training, additional SDG proxy labels are derived from satellite data (see SDG Scoring below).
 
@@ -123,13 +123,17 @@ LSTM(512 → 128)
 Linear(128 → 1)  →  Wealth index at final time step
 ```
 
+> **Status:** Architecture implemented; end-to-end temporal training requires paired (image, label) sequences across multiple DHS survey rounds, which are available for Kenya (2014, 2022) and Nigeria (2018, 2023). Full temporal evaluation is planned as a next step.
+
 ### Vision Transformer — `models/vit_model.py`
 
 `vit_base_patch16_224` from `timm`, classification head replaced with a scalar regression head. Used for architecture comparison experiments.
 
 ### Tabular Baseline — `pipeline/phase2_train.py`
 
-Gradient Boosting Regressor (500 estimators, max depth 4) on nine hand-crafted cluster-level features: NTL mean/std/max, Excess Green index, S2 brightness, NTL trend slope, urban flag, latitude, longitude. Provides a strong baseline that validates the satellite-to-wealth signal before committing to deep learning.
+Gradient Boosting Regressor (500 estimators, max depth 4) on nine hand-crafted cluster-level features: NTL mean/std/max, Excess Green index, S2 brightness, NTL trend slope, urban flag, latitude, longitude.
+
+This model is currently used for all-country production predictions in `predictions.geojson` because it can run on country-level satellite aggregates where per-cluster image patches are unavailable. The CNN/ViT models require actual Sentinel-2 patches centred on each DHS cluster coordinate and are the research focus; they are trained and evaluated on the Kenya + Nigeria patch dataset.
 
 ---
 
@@ -179,7 +183,9 @@ Six sensor combinations are trained with identical architectures and hyperparame
 | S2 + VIIRS | 4 | Optical + NTL fusion |
 | S2 + S1 + VIIRS | 6 | Full fusion |
 
-Metrics — R², RMSE, MAE — are recorded per run and saved to `outputs/experiments/satellite_comparison.csv`. The goal is to identify the sensor combination that maximises prediction accuracy per unit of data cost, directly addressing WP2.
+Metrics — R², RMSE, MAE — are recorded per run and saved to `outputs/experiments/satellite_comparison.csv`. This experiment isolates the **sensor-type** dimension of the precision/cost trade-off (optical vs. SAR vs. NTL).
+
+> **Note on WP2 scope:** The Chalmers PhD agenda additionally targets a **spatial resolution** comparison — Pléiades (2 m), Sentinel-2 (10 m), and Landsat (30 m). Pléiades requires commercial licensing and is not included here. This project covers the Sentinel-2 (10 m) vs. Landsat (30 m) axis; the Landsat extraction pipeline (`pipeline/extract_landsat.py`) produces 30 m NDVI/NDBI patches that can be used in the same training framework as a resolution baseline.
 
 ---
 
@@ -219,6 +225,38 @@ Works with both `ResNetRegression` and `MultiTaskResNet`. No additional dependen
 
 ---
 
+## Results
+
+### Tabular baseline (GBR) — Kenya + Nigeria, 80/20 random split
+
+| Metric | Value |
+|--------|-------|
+| R² | **0.776** |
+| RMSE | 0.401 |
+| MAE | 0.306 |
+| Training samples | 2,439 |
+| Validation samples | 609 |
+
+Top feature importances: `is_urban` (48%), `latitude` (16%), `ntl_mean` (10%), `lon` (7%). The dominance of `is_urban` and geographic coordinates reflects the strong urban-rural wealth gradient in DHS data and confirms the satellite signal is meaningful but coordinates carry substantial baseline variance.
+
+> **Note on evaluation:** These metrics are from an 80/20 random split on the Kenya + Nigeria DHS dataset. For deployment-realistic estimates, see `experiments/spatial_cv_experiment.py` which runs leave-one-country-out cross-validation to enforce strict geographic separation between train and test sets.
+
+### Deep learning (ResNet18) — preliminary
+
+CNN model training requires per-cluster Sentinel-2 patches (256 × 256 px). Full benchmark results against the tabular baseline using spatial CV are in progress.
+
+### Comparison to prior work
+
+| Method | Dataset | R² |
+|--------|---------|-----|
+| Jean et al. 2016 (transfer learning, NTL pretrain) | Uganda, Tanzania | ~0.63 |
+| Yeh et al. 2020 (multi-task CNN) | 23 African countries | ~0.70 |
+| **This work — GBR tabular (Kenya + Nigeria)** | Kenya, Nigeria | **0.776** |
+
+The tabular result is not directly comparable (different countries, different feature engineering) but situates the project in the relevant literature.
+
+---
+
 ## SDG Scoring (`scoring/sdg_scorer.py`)
 
 Raw model outputs are mapped to interpretable 0–100 SDG progress scores using threshold-based linear scaling:
@@ -242,6 +280,8 @@ score = clip(brightness / buildup_threshold, 0, 1) × 100
 Higher brightness correlates with built-up surface area and infrastructure density.
 
 **Composite score** — weighted average across available tasks (SDG1: weight 1.0, SDG7: 0.5, SDG11: 0.5).
+
+> **Caveat:** The thresholds and weights above are heuristic proxies derived from the satellite data distributions, not from official SDG monitoring methodology. They are appropriate for relative ranking and trend analysis but should not be reported as SDG-compliant metrics without validation against ground-truth survey data.
 
 Scores are stored in `docs/data/predictions.geojson` and rendered on the interactive Leaflet map.
 
@@ -396,6 +436,19 @@ Copy `.env.example` to `.env` and fill in your keys.
 
 ---
 
+## Limitations and Roadmap
+
+| Limitation | Detail | Planned fix |
+|---|---|---|
+| DHS coverage | Real cluster-level predictions only for Kenya and Nigeria. 26 other countries use country-level satellite aggregates scaled by empirical rules. | Integrate additional DHS rounds (Ethiopia, Ghana, Tanzania) as data access is obtained. |
+| No Pléiades (2 m) | Commercial licensing required; not included in current satellite comparison. | Pléiades NEO data via ESA Third Party Missions would close the WP2 resolution axis. |
+| CNN not in production path | `predictions.geojson` is generated by the GBR tabular model; CNN/ViT models require patch-level data. | Wire `scoring/run_inference.py` to use the fine-tuned ResNet18 for Kenya/Nigeria clusters once patch dataset is finalised. |
+| Temporal model untrained | `TemporalModel` (CNN+LSTM) is implemented but not yet trained end-to-end. | Train on Kenya 2014/2022 and Nigeria 2018/2023 paired rounds; report wealth-change prediction accuracy. |
+| Evaluation metric risk | `evaluate_model.py` currently reports metrics on the full dataset; proper test-set evaluation requires a held-out split committed before training. | Integrate spatial CV metrics as the canonical reported result. |
+| SDG thresholds are heuristic | NTL and NDBI thresholds are not calibrated against household survey electricity access or infrastructure data. | Cross-validate thresholds against DHS household electrification responses. |
+
+---
+
 ## Key Design Decisions
 
 **Why DHS labels?** The Demographic and Health Surveys are the gold standard for sub-national poverty measurement in low-income countries. The continuous wealth index is more informative than binary poverty thresholds and enables regression rather than classification.
@@ -405,3 +458,5 @@ Copy `.env.example` to `.env` and fill in your keys.
 **Why leave-one-country-out CV?** Random spatial splits allow information from nearby clusters to leak between train and test sets (Moran's I effect). Country-level holdout enforces strict spatial independence and gives a realistic estimate of out-of-distribution generalisation — the scenario that actually matters for deployment in new countries.
 
 **Why GradCAM on layer4?** The final residual block captures the highest-level spatial abstractions (200–300 m receptive field at 10 m/px input). Earlier layers capture texture; later pooling discards spatial information entirely. `layer4[-1]` is the standard explainability target for ResNet architectures and has been validated in remote sensing literature.
+
+**Why a tabular model for all-country predictions?** The CNN models require 256 × 256 px Sentinel-2 patches centred on known DHS cluster coordinates. Only Kenya and Nigeria currently have those patch datasets. For the other 26 countries, we have only country-level GEE aggregates (annual mean NDVI, NDBI, NTL). A GBR on nine derived features bridges this gap and allows a complete SSA map while the patch dataset is expanded — at the cost of coarser, less trustworthy predictions outside the DHS countries.
