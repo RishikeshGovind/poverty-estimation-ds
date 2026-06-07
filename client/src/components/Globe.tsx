@@ -335,12 +335,14 @@ export default function Globe({ onCountryClick }: Props) {
         const col = new Cesium.PointPrimitiveCollection();
         state.povertyFeatures.forEach((f) => {
           col.add({
-            position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 20000),
+            position: Cesium.Cartesian3.fromDegrees(f.lon, f.lat, 0),
             color: pointColor(f, state.sdgLayer, state.layers.poverty.opacity),
             pixelSize: 9,
             outlineColor: Cesium.Color.WHITE.withAlpha(0.7),
             outlineWidth: 1.5,
             scaleByDistance: new Cesium.NearFarScalar(5e5, 2.0, 1e7, 0.7),
+            // Always render on top of terrain so the dot stays visible at any zoom level
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
             id: f,
           });
         });
@@ -356,12 +358,13 @@ export default function Globe({ onCountryClick }: Props) {
         const col = new Cesium.PointPrimitiveCollection();
         state.conflictEvents.forEach((ev) => {
           col.add({
-            position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat, 20000),
+            position: Cesium.Cartesian3.fromDegrees(ev.lon, ev.lat, 0),
             color: conflictColor(ev.fatalities).withAlpha(state.layers.conflict.opacity),
             pixelSize: 12,
             outlineColor: Cesium.Color.WHITE.withAlpha(0.6),
             outlineWidth: 1,
             scaleByDistance: new Cesium.NearFarScalar(5e5, 2.5, 1e7, 0.8),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
             id: ev,
           });
         });
