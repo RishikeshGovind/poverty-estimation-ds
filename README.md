@@ -261,15 +261,12 @@ An R² of 0.776 means the model explains 77.6% of the variation in wealth across
 
 ### Deep learning model (ResNet18)
 
-The CNN model code is complete and the inference pipeline is ready. Early checkpoints produced negative R² on held-out data because fine-tuning directly from ImageNet weights onto scarce DHS labels without a domain-adaptation stage fails — exactly the failure mode Jean et al. (2016) document and solve with NTL pretraining. After completing the pretraining stage and using a freeze-then-unfreeze fine-tuning schedule (backbone frozen for 8 epochs at lr=5e-4 head only, then unfrozen at backbone lr=5e-6 / head lr=1e-4), the CNN reaches R²=0.61 from raw 64×64 Sentinel-2 pixels alone.
+The CNN model uses a two-stage training approach following Jean et al. (2016): first pretrain the ResNet18 backbone to predict VIIRS nighttime light values from Sentinel-2 patches, then fine-tune on DHS wealth labels using a freeze-then-unfreeze schedule (backbone frozen for 8 epochs so the regression head adapts its output range, then unfrozen with differential learning rates: backbone 5e-6, head 1e-4).
 
-| Checkpoint | R² (held out) | Notes |
+| Model | R² (610 held-out clusters) | Notes |
 |---|---|---|
-| s2_kenya_nigeria.pth | -2.86 | No NTL pretraining, uniform LR |
-| best_model.pth | -2.06 | No NTL pretraining, uniform LR |
-| s2_kenya_real.pth | -0.75 | No NTL pretraining, uniform LR |
-| **cnn_pretrained_finetuned.pth** | **+0.61** | NTL pretrain + freeze/unfreeze |
-| **Gradient Boosting (live demo)** | **+0.776** | Hand-crafted features (urban flag 48%) |
+| **ResNet18 CNN (NTL pretrain + freeze/unfreeze)** | **0.61** | Raw 64×64 S2 pixels only |
+| **Gradient Boosting (live demo)** | **0.776** | Includes urban/rural flag (48% importance) |
 
 ### How this compares to published research
 
