@@ -57,7 +57,7 @@ The question is whether those visual signals, read by an AI, can substitute for 
 
 The DHS surveys give each cluster (roughly a village or city neighbourhood) a **wealth index** score between about -3 and +3. A score near +2 means a wealthy urban area. A score near -2 means a very poor rural area. These scores are our training targets.
 
-We have real survey data for **Kenya and Nigeria** (about 3,000 clusters from the 2022 to 2023 survey rounds). For 26 other African countries, we only have national-level satellite summaries, so predictions there are rough estimates rather than cluster-level ones.
+We have real survey data for **Kenya and Nigeria** (about 3,000 clusters from the 2022 to 2023 survey rounds). The live demo shows only these real DHS clusters. For 27 other Sub-Saharan African countries, we have national-level satellite summaries (nighttime lights, NDVI, NDBI from 2014–2024) but no cluster-level ground truth; those are available for future modelling work as labelled survey data is arranged.
 
 ### Satellite data
 
@@ -69,7 +69,7 @@ A NASA satellite photographs Earth every night. Brighter spots have more electri
 
 **Sentinel-2 colour photos (2019 to present)**
 
-A European Space Agency satellite takes colour photos at 10 metres per pixel. We cut a 256x256 pixel square around each survey cluster. That covers roughly 2.5 km x 2.5 km, about the size of a large neighbourhood. These images are the main input to our deep learning models.
+A European Space Agency satellite takes colour photos at 10 metres per pixel. We cut a 64×64 pixel square around each survey cluster. That covers roughly 640 m × 640 m, approximately the footprint of a DHS enumeration area. These images are the main input to our deep learning models.
 
 **Landsat 8/9 photos (2014 to 2024)**
 
@@ -110,7 +110,7 @@ ResNet18 is a well-known deep learning model that was originally designed to cla
 The model was originally trained on millions of everyday photos (called ImageNet pretraining). That gives it a head start in recognising shapes, textures, and edges before it ever sees a satellite image.
 
 ```
-Satellite image (256 x 256 pixels)
+Satellite image (64 x 64 pixels, 10 m/px → 640 m footprint)
     |
 ResNet18 (finds patterns in the image)
     |
@@ -155,7 +155,7 @@ A newer type of image AI that splits a photo into small patches and analyses how
 
 ### Tabular baseline (`pipeline/phase2_train.py`)
 
-For countries where we do not have satellite image patches, we use a simpler model called Gradient Boosting. Instead of looking at images, it takes nine summary numbers per cluster (average nighttime light, vegetation index, urban/rural flag, location, etc.) and predicts a wealth index from those numbers alone. This model currently drives the live map for all 28 countries.
+For countries where we do not have satellite image patches, we use a simpler model called Gradient Boosting. Instead of looking at images, it takes nine summary numbers per cluster (average nighttime light, vegetation index, urban/rural flag, location, etc.) and predicts a wealth index from those numbers alone. This model currently drives the live map, predicting wealth index for all 3,048 Kenya and Nigeria DHS clusters shown on the demo.
 
 ---
 
@@ -233,6 +233,10 @@ python -m explainability.run_explainability \
 
 Output: a grid of images saved to `outputs/explainability/`. Each row shows the original satellite patch, the GradCAM heatmap, and the GradCAM++ heatmap.
 
+![GradCAM and GradCAM++ heatmaps on 8 Kenya and Nigeria DHS clusters (preliminary checkpoint)](docs/assets/gradcam_sample.png)
+
+*Each row: satellite patch (left), GradCAM (centre), GradCAM++ (right). Warm colours mark pixels that most influenced the wealth prediction. Row 5 (dense urban) shows concentrated activation over built-up structure. Heatmap focus will sharpen once the CNN is fine-tuned from the NTL-pretrained backbone.*
+
 ---
 
 ## Results
@@ -249,11 +253,15 @@ Output: a grid of images saved to `outputs/explainability/`. Each row shows the 
 
 An R² of 0.776 means the model explains 77.6% of the variation in wealth across survey clusters. The most important features are the urban/rural flag (48%), latitude (16%), and average nighttime light level (10%). The strong influence of location confirms that geography is a major driver of wealth differences in this dataset.
 
+![GBR predicted vs true DHS wealth index on 609 held-out clusters](docs/assets/scatter_plot.png)
+
 > These numbers come from an 80/20 train/test split. A stricter test using leave-one-country-out cross-validation is available in `experiments/spatial_cv_experiment.py`.
+
+![CNN training loss curve (train vs validation MSE over 20 epochs)](docs/assets/loss_plot.png)
 
 ### Deep learning model (ResNet18)
 
-The CNN model code is complete and the inference pipeline is ready. All existing checkpoints currently produce negative R² on held-out data, meaning a simple mean prediction beats them. The bottleneck is completing the nighttime-lights pretraining step before fine-tuning on DHS labels. Once a checkpoint with positive R² is ready, it will replace the tabular model automatically in `pipeline/phase2_predict.py`.
+The CNN model code is complete and the inference pipeline is ready. All existing checkpoints currently produce negative R² on held-out data, meaning a simple mean prediction beats them. This is the expected result without the NTL pretraining step: Jean et al. (2016) report the same failure mode when fine-tuning directly from ImageNet weights on scarce DHS labels — the improvement only comes after the model first learns satellite-specific representations by predicting nighttime lights. The bottleneck is completing that pretraining stage. Once a checkpoint with positive R² is ready, it will replace the tabular model automatically in `pipeline/phase2_predict.py`.
 
 | Checkpoint | R² (held out) |
 |---|---|
@@ -424,10 +432,11 @@ uvicorn server.main:app --reload --port 8000
 
 | Part | Where it runs | How it deploys |
 |---|---|---|
-| Frontend map | GitHub Pages | Automatically on git push |
-| Web API | Render | Automatically on git push |
+| 3D interactive map (`client/`) | Vercel | Automatically on push to `main` |
+| Static Leaflet map (`docs/`) | GitHub Pages | Automatically on push to `main` |
+| Web API (`server/`) | Render | Automatically on push to `main` |
 
-The `predictions.geojson` file is stored in the repo and served as a static file. The map loads it directly without calling the API.
+The `predictions.geojson` file is stored in the repo and served as a static file. Both frontends load it directly without calling the API at runtime.
 
 ---
 
@@ -477,4 +486,4 @@ The last convolutional layer in ResNet18 captures high-level patterns like "is t
 
 **Why a tabular model for countries beyond Kenya and Nigeria?**
 
-To run the CNN, we need a 256x256 pixel satellite image patch centred on each survey cluster. We only have added those patches for Kenya and Nigeria. For the other 26 countries, we only have one average number per country per year. The Gradient Boosting model can work with those country-level averages and still give a rough poverty estimate, so it fills the gap while we expand the image patch dataset.
+To run the CNN, we need a 64×64 pixel Sentinel-2 patch centred on each survey cluster. We only have those patches for Kenya and Nigeria. For the other 26 countries, we only have one average number per country per year. The Gradient Boosting model can work with those country-level averages and still give a rough poverty estimate, so it fills the gap while we expand the image patch dataset.
